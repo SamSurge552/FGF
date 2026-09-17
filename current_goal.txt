@@ -1,0 +1,79 @@
+游戏名：Foundation galactic frontier
+
+======== 已确认 ========
+- 客户端：PC，窗口标题 Foundation Galactic Frontier
+- 分辨率：1920x1080（固定；Windows 缩放建议 100%）
+- 一次只跑一个目标（助手里选 0/1/2）
+- 停止：F12；鼠标甩到屏幕角落也会停（failsafe）
+- 没有单独失败 UI；超时/找不到按钮用重试或停手
+- 识别：模板匹配。不要拿整张 target/quest/settings/team_hud/invite_hud 当模板（名字、倒计时、战力会变）
+- 玻璃按钮（搜寻放大镜等）只认描边/图标，忽略半透明底；时间圆点 on/off、3分钟块、旗子要认填充色，不能抠中间
+- 游戏若以管理员启动，脚本也必须管理员，否则能移鼠标却点不进去
+- 组队参数改过会成为下次默认（游戏自己记）
+- 每天各约 10 次；计数落盘以后再定
+
+======== 目标0 爪牙·至高教 ========
+1. 次数 --count。不拖等级：点开搜索默认就是 30
+2. 点 search.png
+3. 爪牙页直接点 button4.png（黄搜寻），不要切贡品船
+4. 跳到敌方船，点 goal0_atk.png。船会跑：攻擊按钮还在=没点中再点；按钮没了放大镜回来=船跑了，本轮作废重搜
+5. 必须左 HUD 连续看到 atk.png 才算开战（不要全屏乱配）
+6. 打完：atk 连续消失，或出现 repair.png。成功耗时写入 calibrate.json，自动调最短战斗/超时
+7. 点 repair.png 修理
+8. 不要乱按 ESC（大地图 ESC 会弹出退出框）。只在关邮件时 ESC
+9. 重复直到次数
+
+======== 目标1 贡品船 ========
+前置
+- 地图先到「至高教」（mode.png）。初版不自动滚轮切模式。
+- 选船槽暂不做，用当前已选中的船。
+
+流程
+1. 点 search.png
+2. 点贡品船页签 button3.png
+3. 等级：LEVEL_DRAGS=0 则不拖（需已对齐）。拖法是按住中间数字上下滑，不要用箭头
+4. 点 button4.png 黄搜寻
+5. 点红色集结 button5.png 打开设置。5 秒内必须看到黄确认 rally_confirm.png，否则再点红集结，最多三次
+6. 设置页：
+   - 黄确认=rally_confirm.png（rally_yellow）
+   - 3 分钟：rally_time_block3.png 是暗色 off，点左侧圆点变成绿 on（rally_time_button_on）。变绿后不要再点，否则会 off/on 来回切
+   - 人满即出发 / 人数不足解散先不改
+7. 点黄确认出发
+8. 等左侧船队栏（ship.png，HUD 最左边）出现新旗 flag.png = 派出成功。只在这栏找旗，不看大地图、不看设置页船槽
+9. 看到新旗后先拉人，再等旗消失（默认最多 300 秒，config.RALLY_WAIT）：
+   - 点 team.png（组队后出现，HUD 右侧、搜寻上面）
+   - 出现 team_hud，点 invite.png
+   - 出现 invite_hud，点 invite_all.png（邀请全部）
+   - 回到 team_hud，点 back.png
+10. 船队栏这面旗消失 = 打完。成功则写入校准（出场秒数+总耗时），下次自动调等旗/超时（默认超时 300 秒）
+11. 邮件成功：mail.png → 第一条同时有 win + new + loot 才计数。看完 ESC。已知误判：本来就有未读带奖励邮件
+
+兜底
+- 没有红集结 / 5 秒无黄确认：重搜
+- 没有 team.png：跳过拉人，仍等旗
+- 旗一直不出现：超时后仍查邮件，没有 WIN+NEW+LOOT 不计成功
+- F12 随时停
+
+======== 目标2 100级祈祷舰 ========
+1. 须同时看到 prayer_label/quest_name + invite_yes（对勾）。不要匹配邀请人名字
+2. 点对勾，不要点 invite_no
+3. 点 button.png 攻击，不要点 button2 传送
+4. 暂按「点了攻击」计数
+
+======== 素材 ========
+用：search mail button3 button4 button5 rally_confirm rally_time_block3
+    rally_time_button_on/off flag ship team invite invite_all back
+    goal0_atk atk repair button button2 invite_yes invite_no prayer_label
+    win new loot
+不用整张：target* quest accepted settings box team_hud invite_hud（只作流程说明）
+
+======== 操作 ========
+pip install -r requirements.txt
+start.bat / python gui.py        图形界面（推荐管理员）
+python bot.py --goal 0 --click --count 10
+python bot.py --goal 1 --click --count 10
+python bot.py --goal 2 --click --count 10
+python verify_match.py
+F12 停止。
+config.py：LEVEL_DRAGS、RALLY_WAIT=300、RALLY_MINUTES=3、TRIBUTE_LEVEL
+calibrate.json：目标0战斗耗时、目标1集结耗时；助手可重置校准

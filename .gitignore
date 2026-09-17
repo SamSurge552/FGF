@@ -1,0 +1,30 @@
+__pycache__/
+*.pyc
+debug/
+calibrate.json
+
+# 原始截图与标注，不当模板
+pic/storage/
+pic/annotated/
+
+# 整屏/场景图，仅本地对照用
+pic/stable/accepted.png
+pic/stable/battle.png
+pic/stable/battle2.png
+pic/stable/box.png
+pic/stable/goal0.png
+pic/stable/hud.png
+pic/stable/hud2.png
+pic/stable/hud3.png
+pic/stable/invite_hud.png
+pic/stable/mode.png
+pic/stable/myship.png
+pic/stable/myship_full.png
+pic/stable/quest.png
+pic/stable/quest_name.png
+pic/stable/rally_time_block.png
+pic/stable/settings.png
+pic/stable/target.png
+pic/stable/target2_ok.png
+pic/stable/target3.png
+pic/stable/team_hud.png
