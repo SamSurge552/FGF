@@ -103,8 +103,30 @@ class _MOUSEINPUT(ctypes.Structure):
     ]
 
 
+class _KEYBDINPUT(ctypes.Structure):
+    _fields_ = [
+        ("wVk", ctypes.c_ushort),
+        ("wScan", ctypes.c_ushort),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+
+class _HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", ctypes.c_ulong),
+        ("wParamL", ctypes.c_ushort),
+        ("wParamH", ctypes.c_ushort),
+    ]
+
+
+class _INPUTdata(ctypes.Union):
+    _fields_ = [("mi", _MOUSEINPUT), ("ki", _KEYBDINPUT), ("hi", _HARDWAREINPUT)]
+
+
 class _INPUT(ctypes.Structure):
-    _fields_ = [("type", ctypes.c_ulong), ("mi", _MOUSEINPUT)]
+    _fields_ = [("type", ctypes.c_ulong), ("data", _INPUTdata)]
 
 
 def _abs_mouse(x: int, y: int) -> tuple[int, int]:
@@ -124,7 +146,9 @@ def screen_click(x: int, y: int, hold: float = 0.08) -> None:
     extra = ULONG_PTR(0)
 
     def send(flags: int) -> None:
-        inp = _INPUT(0, _MOUSEINPUT(ax, ay, 0, flags, 0, extra))
+        inp = _INPUT()
+        inp.type = 0
+        inp.data.mi = _MOUSEINPUT(ax, ay, 0, flags, 0, extra)
         user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(_INPUT))
 
     send(flags_move)
@@ -132,6 +156,21 @@ def screen_click(x: int, y: int, hold: float = 0.08) -> None:
     send(flags_move | 0x0002)
     time.sleep(hold)
     send(flags_move | 0x0004)
+
+
+def screen_key(vk: int, hold: float = 0.05) -> None:
+    """SendInput 按键。和点击一样，游戏是管理员时脚本也必须是。"""
+    extra = ULONG_PTR(0)
+
+    def send(flags: int) -> None:
+        inp = _INPUT()
+        inp.type = 1
+        inp.data.ki = _KEYBDINPUT(vk, 0, flags, 0, extra)
+        user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(_INPUT))
+
+    send(0)
+    time.sleep(hold)
+    send(0x0002)
 
 
 def _enum_windows() -> list[WindowRect]:

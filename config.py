@@ -20,7 +20,7 @@ MAIL_THRESH = 0.90
 WIN_THRESH = 0.88
 NEW_THRESH = 0.85
 LOOT_THRESH = 0.88
-ATK_THRESH = 0.70
+ATK_THRESH = 0.95
 ATK_APPEAR_WAIT = 25.0
 ATK_GONE_WAIT = 180.0
 ATK_GONE_CONFIRM = 3.0
@@ -47,7 +47,14 @@ LEVEL_DRAGS = 0
 LEVEL_DRAG_PX = 55
 # 集结人数目标；初版用加减点击次数（正=点+），0=不改。图上常见已是 3
 RALLY_PEOPLE_PLUS_CLICKS = 0
-RALLY_MINUTES = 3
+RALLY_MINUTES_CHOICES = (1, 3, 5, 10)
+RALLY_MINUTES = 1
+
+CHAT_TAB_THRESH = 0.88
+CHAT_OCR_INTERVAL = 1.5
+# 聊天面板页签条、正文（相对 1920x1080 客户区）
+CHAT_TAB_REGION = (640, 105, 700, 75)
+CHAT_BODY_REGION = (690, 185, 650, 720)
 
 # settings.png 里黄集结相对面板的位置，用来推三艘船槽
 PANEL_YELLOW = (114, 581)
@@ -84,4 +91,6 @@ TEMPLATES = {
     "win": os.path.join(STABLE, "win.png"),
     "new": os.path.join(STABLE, "new.png"),
     "loot": os.path.join(STABLE, "loot.png"),
+    "chat_tab_on": os.path.join(STABLE, "chat_tab_on.png"),
+    "mgmt_tab_on": os.path.join(STABLE, "mgmt_tab_on.png"),
 }

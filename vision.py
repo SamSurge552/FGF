@@ -5,10 +5,11 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from config import MATCH_THRESH, TEMPLATES
+import config
+from config import TEMPLATES
 
 # 这些图要靠填充色区分 on/off，不能抠掉中间只留描边
-NO_GLASS = {"time_3", "time_on", "time_off", "flag"}
+NO_GLASS = {"time_3", "time_on", "time_off", "flag", "chat_tab_on", "mgmt_tab_on"}
 
 # 玻璃按钮中间是半透明，背景会变。只拿和中位色差得开的像素（描边/图标）去匹配。
 GLASS_DIST = 25.0
@@ -106,7 +107,7 @@ class Matcher:
         for name, path in TEMPLATES.items():
             self.needles[name] = load_needle(path, glass=name not in NO_GLASS)
 
-    def find(self, frame: np.ndarray, name: str, thresh: float = MATCH_THRESH) -> Hit | None:
+    def find(self, frame: np.ndarray, name: str, thresh: float | None = None) -> Hit | None:
         hits = self.find_all(frame, name, thresh)
         return hits[0] if hits else None
 
@@ -115,7 +116,7 @@ class Matcher:
         frame: np.ndarray,
         name: str,
         region: tuple[int, int, int, int],
-        thresh: float = MATCH_THRESH,
+        thresh: float | None = None,
     ) -> Hit | None:
         x, y, w, h = region
         crop = frame[y : y + h, x : x + w]
@@ -129,7 +130,7 @@ class Matcher:
         frame: np.ndarray,
         name: str,
         region: tuple[int, int, int, int],
-        thresh: float = MATCH_THRESH,
+        thresh: float | None = None,
     ) -> list[Hit]:
         x, y, w, h = region
         crop = frame[y : y + h, x : x + w]
@@ -139,7 +140,9 @@ class Matcher:
             for hit in hits
         ]
 
-    def find_all(self, frame: np.ndarray, name: str, thresh: float = MATCH_THRESH) -> list[Hit]:
+    def find_all(self, frame: np.ndarray, name: str, thresh: float | None = None) -> list[Hit]:
+        if thresh is None:
+            thresh = config.MATCH_THRESH
         needle = self.needles[name]
         if needle.bgr.shape[0] > frame.shape[0] or needle.bgr.shape[1] > frame.shape[1]:
             return []

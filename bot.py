@@ -21,7 +21,8 @@ from pynput import keyboard
 
 import calibrate
 import config
-from capture import focus_window, grab, is_admin, list_windows, pick_game_window, screen_click
+from capture import focus_window, grab, is_admin, list_windows, pick_game_window, screen_click, screen_key
+import overlay
 from vision import Hit, Matcher
 
 pyautogui.FAILSAFE = True
@@ -92,6 +93,7 @@ def wait_hit(matcher: Matcher, rect, name: str, timeout: float, thresh: float | 
         frame = grab(rect)
         last = frame
         hit = matcher.find(frame, name, thresh if thresh is not None else config.MATCH_THRESH)
+        mark_rois(matcher, frame)
         if hit:
             return hit
         time.sleep(config.LOOP_SLEEP)
@@ -173,30 +175,82 @@ def _unique_hits(hits: list[Hit], d: int = 28) -> list[Hit]:
     return kept
 
 
+_RALLY_COL_DX = 190
+_RALLY_ROW_DY = 68
+
+
+def _assign_minute_points(pts: list[tuple[int, int]]) -> dict[int, tuple[int, int]] | None:
+    """2x2：1/3 上一行，5/10 下一行。"""
+    pts = sorted(pts, key=lambda p: (p[1], p[0]))
+    rows: list[list[tuple[int, int]]] = []
+    for p in pts:
+        if not rows or p[1] - rows[-1][0][1] > 28:
+            rows.append([p])
+        else:
+            rows[-1].append(p)
+    for row in rows:
+        row.sort(key=lambda p: p[0])
+    if len(rows) >= 2 and len(rows[0]) >= 2 and len(rows[1]) >= 2:
+        return {1: rows[0][0], 3: rows[0][1], 5: rows[1][0], 10: rows[1][1]}
+    if len(rows) == 1 and len(rows[0]) >= 2:
+        left, right = rows[0][0], rows[0][1]
+        return {
+            1: left,
+            3: right,
+            5: (left[0], left[1] + _RALLY_ROW_DY),
+            10: (right[0], right[1] + _RALLY_ROW_DY),
+        }
+    return None
+
+
+def _rally_radio_grid(matcher: Matcher, frame) -> dict[int, tuple[int, int]] | None:
+    ons = matcher.find_all(frame, "time_on", config.TIME_ON_THRESH)
+    offs = matcher.find_all(frame, "time_off", config.TIME_OFF_THRESH)
+    pts = [h.center for h in _unique_hits(list(ons) + list(offs), d=22)]
+    block3 = matcher.find(frame, "time_3")
+    if block3:
+        p3 = (block3.x1 + 18, block3.center[1])
+        if not any(_near(p3, q, 22) for q in pts):
+            pts.append(p3)
+    grid = _assign_minute_points(pts) if len(pts) >= 2 else None
+    if grid:
+        return grid
+    if block3:
+        x3, y3 = block3.x1 + 18, block3.center[1]
+        return {
+            1: (x3 - _RALLY_COL_DX, y3),
+            3: (x3, y3),
+            5: (x3 - _RALLY_COL_DX, y3 + _RALLY_ROW_DY),
+            10: (x3, y3 + _RALLY_ROW_DY),
+        }
+    return None
+
+
 def ensure_rally_time(matcher: Matcher, rect, frame, do_click: bool) -> None:
-    """3分钟：暗色 off（time_3）点一次应变绿 on。绿点在圆点附近就不再点。"""
-    block = matcher.find(frame, "time_3")
-    if block is None:
-        score, loc = matcher.best(frame, "time_3")
-        logp("贡品", f"没有暗色3分钟off  最高分={score:.3f}@{loc}，当作已经是绿on")
+    """按 RALLY_MINUTES 点 1/3/5/10 对应圆点。已是绿 on 就不再点。"""
+    minutes = int(config.RALLY_MINUTES)
+    if minutes not in config.RALLY_MINUTES_CHOICES:
+        minutes = 1
+    grid = _rally_radio_grid(matcher, frame)
+    if not grid or minutes not in grid:
+        logp("贡品", f"找不到集结时间格子，跳过选{minutes}分钟")
         return
-    fx = block.x1 + 18
-    fy = block.center[1]
-    logp("贡品", f"点3分钟 off→on  圆({fx},{fy})  分={block.score:.3f}")
-    act_xy(rect, fx, fy, do_click, "集结3分钟")
+    fx, fy = grid[minutes]
+    on = matcher.find(frame, "time_on", config.TIME_ON_THRESH)
+    if on and _near(on.center, (fx, fy), 40):
+        logp("贡品", f"{minutes}分钟已是绿on  {on.center}")
+        return
+    logp("贡品", f"点集结{minutes}分钟  圆({fx},{fy})")
+    act_xy(rect, fx, fy, do_click, f"集结{minutes}分钟")
     time.sleep(0.5)
     frame = grab(rect)
     on = matcher.find(frame, "time_on", config.TIME_ON_THRESH)
-    if on and abs(on.center[0] - fx) <= 40 and abs(on.center[1] - fy) <= 40:
-        logp("贡品", f"3分钟已是绿on  {on.center}")
+    if on and _near(on.center, (fx, fy), 40):
+        logp("贡品", f"{minutes}分钟已是绿on  {on.center}")
         return
-    still = matcher.find(frame, "time_3")
-    if still:
-        logp("贡品", "还没变绿，再点一次圆点")
-        act_xy(rect, still.x1 + 18, still.center[1], do_click, "集结3分钟再点")
-        time.sleep(0.4)
-    else:
-        logp("贡品", "暗色3分钟已消失")
+    logp("贡品", "还没变绿，再点一次圆点")
+    act_xy(rect, fx, fy, do_click, f"集结{minutes}分钟再点")
+    time.sleep(0.4)
 
 
 def drag_level(rect, search_go: Hit, do_click: bool) -> None:
@@ -235,14 +289,78 @@ def fleet_hud_region(matcher: Matcher, frame) -> tuple[int, int, int, int]:
     return (x1, y1, rw, rh)
 
 
-def flag_centers(matcher: Matcher, frame) -> list[tuple[int, int]]:
+FLAG_HINT_FLOOR = 0.40
+
+
+def flag_candidates(matcher: Matcher, frame, thresh: float) -> list[Hit]:
     region = fleet_hud_region(matcher, frame)
-    hits = matcher.find_all_in(frame, "flag", region, config.FLAG_THRESH)
-    return [h.center for h in hits]
+    hits = matcher.find_all_in(frame, "flag", region, thresh)
+    return _unique_hits(hits, d=16)
+
+
+def flag_centers(matcher: Matcher, frame) -> list[tuple[int, int]]:
+    return [h.center for h in flag_candidates(matcher, frame, config.FLAG_THRESH)]
+
+
+def weak_flag_hint(matcher: Matcher, frame) -> str:
+    """列出船队栏里看得到、但没过 FLAG_THRESH 的旗。"""
+    region = fleet_hud_region(matcher, frame)
+    x, y, rw, rh = region
+    crop = frame[y : y + rh, x : x + rw]
+    score, loc = matcher.best(crop, "flag") if crop.size else (0.0, (-1, -1))
+    abs_loc = (loc[0] + x, loc[1] + y) if loc[0] >= 0 else loc
+    weak = [h for h in flag_candidates(matcher, frame, FLAG_HINT_FLOOR) if h.score < config.FLAG_THRESH]
+    if weak:
+        bits = "  ".join(f"{h.score:.3f}@{h.center}" for h in weak[:4])
+        return (
+            f"低于阈值的旗 {bits}  阈值={config.FLAG_THRESH:.2f}  "
+            f"船队栏最高={score:.3f}@{abs_loc}"
+        )
+    return f"船队栏无低分旗候选  最高={score:.3f}@{abs_loc}  阈值={config.FLAG_THRESH:.2f}"
+
+
+def find_repair(matcher: Matcher, frame) -> Hit | None:
+    return matcher.find(frame, "repair")
+
+
+def _finish_rally(appear_s: float | None, duration_s: float, reason: str) -> None:
+    nxt = calibrate.record_goal1(appear_s, duration_s, reason)
+    logp(
+        "集结",
+        f"信号={reason}  总耗时{duration_s:.1f}s  "
+        f"下次 出场{nxt['appear_wait']:.0f}s 最短{nxt['min_rally']:.0f}s 超时{nxt['gone_wait']:.0f}s",
+    )
+
+
+def wait_repair_as_signal(matcher: Matcher, rect, t0: float, appear_s: float | None, timeout: float, do_click: bool) -> bool:
+    """没旗可跟时，用修理按钮当打完信号。"""
+    logp("集结", f"没有过线的旗，改等修理按钮，最多 {timeout:.0f}s")
+    deadline = time.time() + timeout
+    last_log = 0.0
+    while time.time() < deadline and not STOP.is_set():
+        frame = grab(rect)
+        elapsed = time.time() - t0
+        if time.time() - last_log >= 10.0:
+            repair = find_repair(matcher, frame)
+            logp(
+                "集结",
+                f"已等修理{elapsed:.0f}s  "
+                f"{'修理有' if repair else '修理无'}  {weak_flag_hint(matcher, frame)}",
+            )
+            last_log = time.time()
+        repair = find_repair(matcher, frame)
+        if repair:
+            logp("集结", f"看到修理按钮  分={repair.score:.3f} {repair.center}  {weak_flag_hint(matcher, frame)}")
+            act(rect, repair, do_click, "自动修理")
+            _finish_rally(appear_s, elapsed, "repair")
+            return True
+        time.sleep(0.6)
+    logp("集结", f"等修理超时  {weak_flag_hint(matcher, grab(rect))}")
+    return False
 
 
 def wait_flag_gone(matcher: Matcher, rect, before: list[tuple[int, int]], do_click: bool = True) -> None:
-    """点黄确认后，看左侧船队栏的旗。成功结束会记耗时，用来改等旗/超时。"""
+    """点黄确认后，看左侧船队栏的旗。没有过线的旗则改等修理。"""
     t = calibrate.timeouts_goal1()
     logp(
         "集结",
@@ -261,14 +379,10 @@ def wait_flag_gone(matcher: Matcher, rect, before: list[tuple[int, int]], do_cli
         fresh = [pt for pt in now if not any(_near(pt, old, 40) for old in before)]
         elapsed = time.time() - t0
         if elapsed - last_log >= 5.0:
-            x, y, rw, rh = region
-            crop = frame[y : y + rh, x : x + rw]
-            score, loc = matcher.best(crop, "flag") if crop.size else (0.0, (-1, -1))
             logp(
                 "集结",
                 f"已等{elapsed:.0f}s  船队栏{region}  "
-                f"flag最高分={score:.3f}@{loc}  阈值={config.FLAG_THRESH:.2f}  "
-                f"当前旗={now or '无'}  新旗={fresh or '无'}",
+                f"当前旗={now or '无'}  新旗={fresh or '无'}  {weak_flag_hint(matcher, frame)}",
             )
             last_log = elapsed
         if fresh:
@@ -276,6 +390,12 @@ def wait_flag_gone(matcher: Matcher, rect, before: list[tuple[int, int]], do_cli
             appear_s = elapsed
             logp("集结", f"船队栏新旗 {appeared}  出场{appear_s:.1f}s")
             break
+        repair = find_repair(matcher, frame)
+        if repair and elapsed >= 4.0:
+            logp("集结", f"等旗时先看到修理  分={repair.score:.3f} {repair.center}  {weak_flag_hint(matcher, frame)}")
+            act(rect, repair, do_click, "自动修理")
+            _finish_rally(None, elapsed, "repair")
+            return
         time.sleep(0.5)
     if appeared is None:
         now = flag_centers(matcher, grab(rect))
@@ -284,40 +404,43 @@ def wait_flag_gone(matcher: Matcher, rect, before: list[tuple[int, int]], do_cli
             appear_s = time.time() - t0
             logp("集结", f"没有多出来的新位置，改为跟踪当前这面旗 {appeared}")
         else:
-            logp("集结", "一直没看到旗，改为超时等待（未写入校准）")
-            t1 = time.time()
-            while time.time() - t1 < t["gone_wait"] and not STOP.is_set():
-                time.sleep(1.0)
+            logp("集结", f"一直没看到过线的旗  {weak_flag_hint(matcher, grab(rect))}")
+            invite_allies(matcher, rect, do_click)
+            wait_repair_as_signal(matcher, rect, t0, None, t["gone_wait"], do_click)
             return
     invite_allies(matcher, rect, do_click)
-    logp("集结", f"等这面旗消失，最多 {t['gone_wait']:.0f}s（出场后至少 {t['min_rally']:.0f}s）")
+    logp("集结", f"等这面旗消失，最多 {t['gone_wait']:.0f}s（出场后至少 {t['min_rally']:.0f}s；也认修理）")
     t_flag = time.time()
     gone_since: float | None = None
     last_log = 0.0
     while time.time() - t_flag < t["gone_wait"] and not STOP.is_set():
-        now = flag_centers(matcher, grab(rect))
+        frame = grab(rect)
+        now = flag_centers(matcher, frame)
         elapsed = time.time() - t_flag
         if elapsed - last_log >= 15.0:
-            logp("集结", f"已等消失{elapsed:.0f}s  当前旗={now or '无'}")
+            logp(
+                "集结",
+                f"已等消失{elapsed:.0f}s  当前旗={now or '无'}  {weak_flag_hint(matcher, frame)}",
+            )
             last_log = elapsed
+        repair = find_repair(matcher, frame)
+        if repair and elapsed >= 4.0:
+            logp("集结", f"等旗消失时看到修理  分={repair.score:.3f} {repair.center}")
+            act(rect, repair, do_click, "自动修理")
+            _finish_rally(appear_s, time.time() - t0, "repair")
+            return
         still = any(_near(appeared, pt, 45) for pt in now)
         if still or elapsed < t["min_rally"]:
             gone_since = None
         else:
             if gone_since is None:
                 gone_since = time.time()
-                logp("集结", f"旗暂时没看到，确认中（需连续{t['gone_confirm']:.1f}s）")
+                logp("集结", f"旗暂时没看到，确认中（需连续{t['gone_confirm']:.1f}s）  {weak_flag_hint(matcher, frame)}")
             elif time.time() - gone_since >= t["gone_confirm"]:
-                duration = time.time() - t0
-                nxt = calibrate.record_goal1(appear_s, duration, "flag_gone")
-                logp(
-                    "集结",
-                    f"旗已消失  总耗时{duration:.1f}s  "
-                    f"下次 出场{nxt['appear_wait']:.0f}s 最短{nxt['min_rally']:.0f}s 超时{nxt['gone_wait']:.0f}s",
-                )
+                _finish_rally(appear_s, time.time() - t0, "flag_gone")
                 return
         time.sleep(0.8)
-    logp("集结", "等旗消失超时（未写入校准）")
+    logp("集结", f"等旗消失超时  {weak_flag_hint(matcher, grab(rect))}")
 
 
 def team_btn_region(frame) -> tuple[int, int, int, int]:
@@ -334,6 +457,7 @@ def wait_hit_in(matcher: Matcher, rect, name: str, region, timeout: float, thres
         frame = grab(rect)
         last = frame
         hit = matcher.find_in(frame, name, region, t)
+        mark_rois(matcher, frame)
         if hit:
             return hit
         time.sleep(config.LOOP_SLEEP)
@@ -380,6 +504,64 @@ def invite_allies(matcher: Matcher, rect, do_click: bool) -> None:
     logp("邀请", "拉人结束，开始等旗消失")
 
 
+def press_esc(rect, why: str) -> None:
+    ok = focus_window(rect)
+    if not ok:
+        log("游戏窗口没到前台，仍尝试 ESC")
+    logp("按键", f"ESC  {why}")
+    screen_key(0x1B)
+    time.sleep(0.7)
+
+
+def mail_panel_open(matcher: Matcher, frame) -> bool:
+    return bool(
+        matcher.find(frame, "win", config.WIN_THRESH)
+        or matcher.find(frame, "loot", config.LOOT_THRESH)
+        or matcher.find(frame, "new", config.NEW_THRESH)
+    )
+
+
+def close_mail_panel(matcher: Matcher, rect, do_click: bool, why: str, opened: bool = False) -> bool:
+    """最多 ESC 两次，且第二次必须还能看到邮件痕迹。关了就不按，避免退出框。"""
+    if not do_click:
+        return True
+    frame = grab(rect)
+    search = matcher.find(frame, "search", config.SEARCH_THRESH)
+    go = matcher.find(frame, "search_go")
+    mailish = mail_panel_open(matcher, frame)
+    if (search or go) and not mailish:
+        return True
+    if not mailish and not opened:
+        return bool(search or go)
+
+    esc_used = 0
+    press_esc(rect, why)
+    esc_used += 1
+    time.sleep(0.4)
+    deadline = time.time() + 2.5
+    while time.time() < deadline and not STOP.is_set():
+        frame = grab(rect)
+        search = matcher.find(frame, "search", config.SEARCH_THRESH)
+        go = matcher.find(frame, "search_go")
+        mailish = mail_panel_open(matcher, frame)
+        if not mailish:
+            if search or go:
+                logp("邮件", "面板已关，搜寻回来了")
+            else:
+                logp("邮件", "邮件痕迹没了，不再 ESC")
+            return True
+        if esc_used >= 2:
+            break
+        press_esc(rect, f"{why}（邮件还开着，再关一次）")
+        esc_used += 1
+        time.sleep(0.5)
+    frame = grab(rect)
+    mailish = mail_panel_open(matcher, frame)
+    if mailish:
+        logp("邮件", "按了两次 ESC 邮件还在，停手，避免再按出退出框")
+    return not mailish
+
+
 def check_mail_success(matcher: Matcher, rect, do_click: bool) -> bool:
     """打完后点邮件箱。第一条同时有 WIN+NEW+LOOT 算成功。
     已知误判：若本来就有未读且带奖励的邮件，会当成成功。
@@ -403,9 +585,7 @@ def check_mail_success(matcher: Matcher, rect, do_click: bool) -> bool:
         time.sleep(config.LOOP_SLEEP)
     if frame is None or win is None:
         log("邮件里没有胜利标，本轮失败")
-        if do_click:
-            pyautogui.press("esc")
-            time.sleep(0.6)
+        close_mail_panel(matcher, rect, do_click, "关邮件", opened=True)
         return False
     news = matcher.find_all(frame, "new", config.NEW_THRESH)
     loots = matcher.find_all(frame, "loot", config.LOOT_THRESH)
@@ -422,9 +602,7 @@ def check_mail_success(matcher: Matcher, rect, do_click: bool) -> bool:
         f"NEW={'有' if has_new else '无'}  LOOT={'有' if has_loot else '无'}  -> {'成功' if ok else '失败'}"
     )
     save_debug(matcher, frame, [first] + [h for h in news + loots if same_row(h)])
-    if do_click:
-        pyautogui.press("esc")
-        time.sleep(0.8)
+    close_mail_panel(matcher, rect, do_click, "关邮件", opened=True)
     return ok
 
 
@@ -433,19 +611,34 @@ def left_hud(frame) -> tuple[int, int, int, int]:
     return (0, 0, min(360, w), h)
 
 
+def mark_rois(matcher: Matcher, frame) -> None:
+    extra = getattr(matcher, "extra_regions", None)
+    if extra is None:
+        return
+    extra(
+        [
+            ("左HUD", *left_hud(frame)),
+            ("船队栏", *fleet_hud_region(matcher, frame)),
+            ("组队区", *team_btn_region(frame)),
+        ]
+    )
+
+
 def find_atk(matcher: Matcher, frame) -> Hit | None:
     """只认左 HUD。全屏匹配容易把别的图标当成战斗中。"""
     return matcher.find_in(frame, "atk", left_hud(frame), config.ATK_THRESH)
 
 
 def scene_flags(matcher: Matcher, frame) -> dict[str, Hit | None]:
-    return {
+    flags = {
         "search": matcher.find(frame, "search", config.SEARCH_THRESH),
         "search_go": matcher.find(frame, "search_go"),
         "goal0_atk": matcher.find(frame, "goal0_atk"),
         "atk": find_atk(matcher, frame),
         "repair": matcher.find(frame, "repair"),
     }
+    mark_rois(matcher, frame)
+    return flags
 
 
 def describe_scene(flags: dict[str, Hit | None]) -> str:
@@ -594,8 +787,14 @@ def open_search(matcher: Matcher, rect, do_click: bool) -> Hit | None:
 
     search = wait_hit(matcher, rect, "search", config.PANEL_WAIT, config.SEARCH_THRESH)
     if not search:
-        log("找不到搜寻放大镜")
-        return None
+        frame = grab(rect)
+        if mail_panel_open(matcher, frame):
+            logp("搜寻", "找不到放大镜，邮件面板还开着，先关掉")
+            close_mail_panel(matcher, rect, do_click, "搜寻前关邮件")
+            search = wait_hit(matcher, rect, "search", 4.0, config.SEARCH_THRESH)
+        if not search:
+            log("找不到搜寻放大镜")
+            return None
     go = None
     for _ in range(3):
         act(rect, search, do_click, "开搜寻")
@@ -681,8 +880,12 @@ def run_goal1(matcher: Matcher, rect, do_click: bool, count: int) -> None:
         go = matcher.find(grab(rect), "search_go") or go
         act(rect, go, do_click, "确认搜寻")
         time.sleep(1.0)
-        map_flags = flag_centers(matcher, grab(rect))
-        logp("集结", f"打开设置前，左侧船队栏的旗 {map_flags if map_flags else '无'}")
+        pre = grab(rect)
+        map_flags = flag_centers(matcher, pre)
+        logp(
+            "集结",
+            f"打开设置前，左侧船队栏的旗 {map_flags if map_flags else '无'}  {weak_flag_hint(matcher, pre)}",
+        )
         yellow = click_red_until_yellow(matcher, rect, do_click)
         if not yellow:
             logp("目标1", "红集结没点上，重新搜寻")
@@ -771,6 +974,7 @@ def scan_once(matcher: Matcher, rect) -> None:
         if hit:
             hits.append(hit)
             log(f"scan {hit.name}={hit.score:.3f} {hit.center}")
+    mark_rois(matcher, frame)
     save_debug(matcher, frame, hits)
     log(f"已写 debug/last_frame.png  命中 {len(hits)} 个")
 
@@ -778,8 +982,9 @@ def scan_once(matcher: Matcher, rect) -> None:
 def run_session(goal: int = 0, count: int = 10, click: bool = False, dry: bool = False) -> int:
     STOP.clear()
     ensure_stop_listener()
-    matcher = Matcher()
+    matcher = overlay.LiveMatcher()
     rect = pick_game_window()
+    matcher.bind(rect)
     log(f"窗口 {rect.width}x{rect.height} at ({rect.left},{rect.top})  {rect.title!r}")
     if is_admin():
         log("当前是管理员权限")
