@@ -18,6 +18,34 @@ user32.SetProcessDPIAware()
 
 ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
 
+# 句柄是 64 位。不声明的话第二个参数会被当成 32 位整数，大句柄直接 OverflowError。
+_H = ctypes.c_void_p
+user32.GetDC.restype = _H
+user32.GetDC.argtypes = [_H]
+user32.ReleaseDC.argtypes = [_H, _H]
+user32.PrintWindow.argtypes = [_H, _H, ctypes.c_uint]
+user32.GetWindowRect.argtypes = [_H, ctypes.c_void_p]
+user32.GetClientRect.argtypes = [_H, ctypes.c_void_p]
+user32.ClientToScreen.argtypes = [_H, ctypes.c_void_p]
+user32.IsWindowVisible.argtypes = [_H]
+user32.GetWindowTextLengthW.argtypes = [_H]
+user32.GetWindowTextW.argtypes = [_H, ctypes.c_wchar_p, ctypes.c_int]
+user32.GetWindowThreadProcessId.argtypes = [_H, ctypes.c_void_p]
+user32.IsIconic.argtypes = [_H]
+user32.ShowWindow.argtypes = [_H, ctypes.c_int]
+user32.SetForegroundWindow.argtypes = [_H]
+user32.BringWindowToTop.argtypes = [_H]
+user32.GetForegroundWindow.restype = _H
+gdi32.CreateCompatibleDC.restype = _H
+gdi32.CreateCompatibleDC.argtypes = [_H]
+gdi32.CreateCompatibleBitmap.restype = _H
+gdi32.CreateCompatibleBitmap.argtypes = [_H, ctypes.c_int, ctypes.c_int]
+gdi32.SelectObject.restype = _H
+gdi32.SelectObject.argtypes = [_H, _H]
+gdi32.DeleteObject.argtypes = [_H]
+gdi32.DeleteDC.argtypes = [_H]
+gdi32.GetDIBits.argtypes = [_H, _H, ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
+
 
 def is_admin() -> bool:
     try:
@@ -156,6 +184,50 @@ def screen_click(x: int, y: int, hold: float = 0.08) -> None:
     send(flags_move | 0x0002)
     time.sleep(hold)
     send(flags_move | 0x0004)
+
+
+def screen_move(x: int, y: int) -> None:
+    ax, ay = _abs_mouse(x, y)
+    extra = ULONG_PTR(0)
+    inp = _INPUT()
+    inp.type = 0
+    inp.data.mi = _MOUSEINPUT(ax, ay, 0, 0x0001 | 0x8000 | 0x4000, 0, extra)
+    user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(_INPUT))
+
+
+def screen_wheel(notches: int = -1) -> None:
+    """一格 120。负=后滚（朝自己）。不要改 screen_click 的三次 SendInput。"""
+    extra = ULONG_PTR(0)
+    delta = int(notches) * 120
+    inp = _INPUT()
+    inp.type = 0
+    inp.data.mi = _MOUSEINPUT(0, 0, delta & 0xFFFFFFFF, 0x0800, 0, extra)
+    user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(_INPUT))
+
+
+def screen_drag(x1: int, y1: int, x2: int, y2: int, steps: int = 8) -> None:
+    """按住拖到终点。不要并进 screen_click。"""
+    extra = ULONG_PTR(0)
+    flags_move = 0x0001 | 0x8000 | 0x4000
+
+    def send_at(x: int, y: int, flags: int) -> None:
+        ax, ay = _abs_mouse(x, y)
+        inp = _INPUT()
+        inp.type = 0
+        inp.data.mi = _MOUSEINPUT(ax, ay, 0, flags, 0, extra)
+        user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(_INPUT))
+
+    send_at(x1, y1, flags_move)
+    time.sleep(0.05)
+    send_at(x1, y1, flags_move | 0x0002)
+    time.sleep(0.05)
+    n = max(1, int(steps))
+    for i in range(1, n + 1):
+        x = x1 + (x2 - x1) * i // n
+        y = y1 + (y2 - y1) * i // n
+        send_at(x, y, flags_move)
+        time.sleep(0.02)
+    send_at(x2, y2, flags_move | 0x0004)
 
 
 def screen_key(vk: int, hold: float = 0.05) -> None:

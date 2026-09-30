@@ -43,7 +43,7 @@ def main() -> None:
         ("rally_confirm.png", "settings.png", "新settings含战舰选择", 0.90),
         ("invite_yes.png", "quest.png", "邀请对勾（用户裁切）", 0.90),
         ("invite_no.png", "quest.png", "邀请叉（用户裁切）", 0.90),
-        ("prayer_label.png", "quest.png", "至高祈祷舰（quest_name）", 0.90),
+        ("prayer_label.png", "quest.png", "至高祈祷舰", 0.90),
         ("flag.png", "settings.png", "组队旗(已在队)", 0.80),
         ("trading.png", "settings.png", "商运中舰队", 0.85),
         ("rally_time_block3.png", "settings.png", "3分钟选项（未选中时的圆+字）", 0.90),

@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 debug/
-calibrate.json
+hud_layout.json
 
 # 原始截图与标注，不当模板
 pic/storage/
@@ -21,10 +21,14 @@ pic/stable/mode.png
 pic/stable/myship.png
 pic/stable/myship_full.png
 pic/stable/quest.png
-pic/stable/quest_name.png
 pic/stable/rally_time_block.png
 pic/stable/settings.png
 pic/stable/target.png
 pic/stable/target2_ok.png
 pic/stable/target3.png
 pic/stable/team_hud.png
+pic/guild_chat1.png
+pic/guild_chat2.png
+pic/guild_chat2.png.png
+pic/chat/
+logs/

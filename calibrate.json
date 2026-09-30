@@ -1,0 +1,402 @@
+{
+  "goal0": [
+    {
+      "ts": "2026-09-28T15:56:50",
+      "appear_s": 0.03,
+      "duration_s": 62.12,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T15:58:13",
+      "appear_s": 0.03,
+      "duration_s": 64.83,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T15:59:33",
+      "appear_s": 0.04,
+      "duration_s": 62.52,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:00:54",
+      "appear_s": 0.03,
+      "duration_s": 62.55,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:14:17",
+      "appear_s": 0.04,
+      "duration_s": 59.41,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:15:38",
+      "appear_s": 0.03,
+      "duration_s": 63.74,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:16:57",
+      "appear_s": 0.03,
+      "duration_s": 61.16,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:18:14",
+      "appear_s": 0.04,
+      "duration_s": 59.29,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:19:38",
+      "appear_s": 0.04,
+      "duration_s": 65.95,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:20:59",
+      "appear_s": 0.04,
+      "duration_s": 61.35,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:22:20",
+      "appear_s": 0.03,
+      "duration_s": 61.28,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:23:37",
+      "appear_s": 0.04,
+      "duration_s": 59.37,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:24:59",
+      "appear_s": 0.04,
+      "duration_s": 61.86,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:26:16",
+      "appear_s": 0.03,
+      "duration_s": 59.47,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:27:33",
+      "appear_s": 0.04,
+      "duration_s": 61.79,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:28:53",
+      "appear_s": 0.04,
+      "duration_s": 61.72,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:33:33",
+      "appear_s": 0.04,
+      "duration_s": 63.44,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:34:52",
+      "appear_s": 0.03,
+      "duration_s": 60.9,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:36:11",
+      "appear_s": 0.04,
+      "duration_s": 60.72,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:37:31",
+      "appear_s": 0.04,
+      "duration_s": 60.68,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:38:50",
+      "appear_s": 0.03,
+      "duration_s": 60.75,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:40:13",
+      "appear_s": 0.04,
+      "duration_s": 62.92,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:41:34",
+      "appear_s": 0.03,
+      "duration_s": 63.06,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:42:57",
+      "appear_s": 0.04,
+      "duration_s": 62.77,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:44:15",
+      "appear_s": 0.03,
+      "duration_s": 60.87,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:45:36",
+      "appear_s": 0.04,
+      "duration_s": 60.8,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:46:59",
+      "appear_s": 0.03,
+      "duration_s": 63.01,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:48:18",
+      "appear_s": 0.04,
+      "duration_s": 60.49,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:51:13",
+      "appear_s": 0.04,
+      "duration_s": 74.92,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:52:52",
+      "appear_s": 0.04,
+      "duration_s": 81.43,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:54:31",
+      "appear_s": 0.03,
+      "duration_s": 81.92,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:56:09",
+      "appear_s": 0.04,
+      "duration_s": 79.7,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:57:46",
+      "appear_s": 0.03,
+      "duration_s": 79.83,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T16:59:24",
+      "appear_s": 0.04,
+      "duration_s": 79.57,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:01:03",
+      "appear_s": 0.04,
+      "duration_s": 81.81,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:02:40",
+      "appear_s": 0.03,
+      "duration_s": 79.39,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:04:18",
+      "appear_s": 0.03,
+      "duration_s": 79.99,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:05:53",
+      "appear_s": 0.03,
+      "duration_s": 76.84,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:07:25",
+      "appear_s": 0.04,
+      "duration_s": 75.11,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:09:03",
+      "appear_s": 0.04,
+      "duration_s": 79.41,
+      "reason": "repair"
+    }
+  ],
+  "goal1": [
+    {
+      "ts": "2026-09-23T10:44:42",
+      "appear_s": null,
+      "duration_s": 5.12,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-24T10:04:30",
+      "appear_s": 0.67,
+      "duration_s": 82.96,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-24T10:06:50",
+      "appear_s": 0.67,
+      "duration_s": 121.61,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-24T10:08:17",
+      "appear_s": 0.69,
+      "duration_s": 69.14,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T09:54:19",
+      "appear_s": 12.33,
+      "duration_s": 86.23,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T09:56:46",
+      "appear_s": 0.7,
+      "duration_s": 126.36,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T09:59:03",
+      "appear_s": 0.69,
+      "duration_s": 116.42,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T10:00:17",
+      "appear_s": 0.71,
+      "duration_s": 52.77,
+      "reason": "flag_gone"
+    },
+    {
+      "ts": "2026-09-28T17:35:17",
+      "appear_s": 1.0,
+      "duration_s": 16.15,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:37:04",
+      "appear_s": null,
+      "duration_s": 73.87,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:39:40",
+      "appear_s": 0.99,
+      "duration_s": 108.2,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-28T17:42:12",
+      "appear_s": 1.01,
+      "duration_s": 104.84,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:08:35",
+      "appear_s": 1.02,
+      "duration_s": 16.5,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:09:51",
+      "appear_s": null,
+      "duration_s": 47.4,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:11:49",
+      "appear_s": 1.01,
+      "duration_s": 94.72,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:14:03",
+      "appear_s": 1.01,
+      "duration_s": 109.99,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:16:33",
+      "appear_s": 1.02,
+      "duration_s": 101.86,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:18:39",
+      "appear_s": 1.01,
+      "duration_s": 102.13,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:21:04",
+      "appear_s": 1.03,
+      "duration_s": 121.38,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:22:46",
+      "appear_s": 0.99,
+      "duration_s": 77.62,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-29T09:24:52",
+      "appear_s": 1.01,
+      "duration_s": 94.34,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-30T14:39:38",
+      "appear_s": 1.01,
+      "duration_s": 16.2,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-30T14:42:33",
+      "appear_s": null,
+      "duration_s": 148.14,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-30T15:03:39",
+      "appear_s": 1.04,
+      "duration_s": 16.4,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-30T15:07:05",
+      "appear_s": 1.0,
+      "duration_s": 16.06,
+      "reason": "repair"
+    },
+    {
+      "ts": "2026-09-30T15:54:55",
+      "appear_s": 0.45,
+      "duration_s": 41.3,
+      "reason": "flag_gone"
+    }
+  ]
+}

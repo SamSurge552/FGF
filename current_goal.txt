@@ -1,79 +1,119 @@
 游戏名：Foundation galactic frontier
 
+======== 结构（改流程先看这里）========
+一次只跑一个目标。助手目标 0/1/2/3。勾选「无限」则忽略次数：巡逻直到找到船或停止；爪牙、贡品、祈祷直到停止。新功能先写进本文件对应小节，写好了再说，不要先改代码。
+
+主循环：gui.py 点开始 → bot.run_session → run_goal0/1/2/3
+识别：vision.Matcher 模板匹配。bot 里用 overlay.LiveMatcher，把检测区域和命中画到游戏上
+点击：capture.screen_click（SendInput 移动+按下+抬起，禁止拆开）
+ESC：capture.screen_key(0x1B)，只关邮件
+截图：capture.grab
+停止：助手「停止」或 F12；开始/停止各播一声（上扬/下降）。停了屏幕标记立刻收掉
+设置：点主界面「设置」打开。窗口够宽，阈值两列加纵向滚动，不会挤出右边。每一项单独对应一个模板（组队就是 team.png，不再放进「其它」）。存盘前先读数字框里的字。校准 → calibrate.json
+聊天：独立工具 chat_gui.py / chat_log.py，只读 OCR，不点鼠标，不进主循环
+
+滚轮：SendInput 一格 120。后滚 mouseData=-120。滚前把鼠标移到左HUD右侧空白一次，不要每格都甩到屏幕正中。间隔面板「滚轮」可改（默认 0.2s）。
+拖图：capture.screen_drag，不要并进 screen_click。
+
 ======== 已确认 ========
 - 客户端：PC，窗口标题 Foundation Galactic Frontier
 - 分辨率：1920x1080（固定；Windows 缩放建议 100%）
-- 一次只跑一个目标（助手里选 0/1/2）
-- 停止：F12；鼠标甩到屏幕角落也会停（failsafe）
 - 没有单独失败 UI；超时/找不到按钮用重试或停手
-- 识别：模板匹配。不要拿整张 target/quest/settings/team_hud/invite_hud 当模板（名字、倒计时、战力会变）
-- 玻璃按钮（搜寻放大镜等）只认描边/图标，忽略半透明底；时间圆点 on/off、3分钟块、旗子要认填充色，不能抠中间
+- 不要拿整张 target/quest/settings/team_hud/invite_hud 当模板
+- 玻璃按钮（搜寻放大镜等）只认描边/图标；时间圆点 on/off、3分钟块、旗、聊天页签走 NO_GLASS（认填充色）
 - 游戏若以管理员启动，脚本也必须管理员，否则能移鼠标却点不进去
 - 组队参数改过会成为下次默认（游戏自己记）
+- 组队（team.png，右侧红旗）只在右 HUD 里找，二值只留浅色底，较暗的旗面不收。组队旗（flag.png，蓝色）和船队 ATK 只在 hud_ship 里找，HUD测试也一样。组队旗按浅蓝旗面做成二值后再配，黑的地方也要是黑。ATK 按暗红做成二值后再配。阈值见设置「组队」「组队旗」「船队ATK」。
+- 左 HUD 先不启用（图还在，对齐和查找都不用）。右 HUD、船队栏不拿整张去匹配，也不在平时画框。点「对齐HUD」后每张图是单独的真透明小窗，拖到游戏上，位置写入 hud_layout.json。不要铺一整块色键层，色键会把半透明图变成实心挡住游戏。组队旗（flag）和 ATK 只在对齐后的船队栏里找。组队（team.png）只在右 HUD。
+- 船标：画面先 HSV 二值，再和 pic/ship/tpl 的 16 张拉长模板比。黑底不参与。分数是 1−像素差，越大越像，默认 0.50。误检只排除 hud1/hud2/hud3。pic/ship/spare 不参与匹配。巡逻、测试船标、HUD测试都一样
+- 屏幕标记：任意检测区域（青虚线）+ 任意过线命中（彩框）。点会穿透。换一帧就清掉上一帧的框。停止必须消失
+- 各元素在哪找、做不做二值：只看 search_where.txt。改了范围或预处理要同时改这份，不要再扫代码。HUD测试走同一套范围。
+- 「测试显示」秒数只用于 HUD测试和测试船标，不插入正式流程的等待
 - 每天各约 10 次；计数落盘以后再定
 
 ======== 目标0 爪牙·至高教 ========
-1. 次数 --count。不拖等级：点开搜索默认就是 30
-2. 点 search.png
-3. 爪牙页直接点 button4.png（黄搜寻），不要切贡品船
-4. 跳到敌方船，点 goal0_atk.png。船会跑：攻擊按钮还在=没点中再点；按钮没了放大镜回来=船跑了，本轮作废重搜
-5. 必须左 HUD 连续看到 atk.png 才算开战（不要全屏乱配）
-6. 打完：atk 连续消失，或出现 repair.png。成功耗时写入 calibrate.json，自动调最短战斗/超时
-7. 点 repair.png 修理
-8. 不要乱按 ESC（大地图 ESC 会弹出退出框）。只在关邮件时 ESC
-9. 重复直到次数
+1. 次数：助手次数 / --count。不拖等级：搜索默认就是 30
+2. open_search：已有修理先点修理。已有黄搜寻则不再点放大镜。找不到放大镜且邮件还开着则先 ESC 关邮件再找
+3. 点黄搜寻（search_go）。按钮还在就再点，最多 3 次；三次还在就响一声并停止。不要切贡品船
+4. 点 goal0_atk。最多 3 次：
+   - 船队栏连续 2 帧 atk = 已开战
+   - 攻擊按钮还在 = 没点中，再点
+   - 按钮没了、放大镜回来 = 船跑了，本轮不算，重搜
+5. 打完：优先出现 repair；否则 atk 出现后再连续消失。成功写入 calibrate.json（调最短战斗/超时）
+6. 有 repair 就点。不要乱 ESC
+7. 重复直到次数。勾选无限则忽略次数，直到停止。打完超时则不再开下一轮搜寻
 
 ======== 目标1 贡品船 ========
 前置
-- 地图先到「至高教」（mode.png）。初版不自动滚轮切模式。
-- 选船槽暂不做，用当前已选中的船。
+- 地图需已是「至高教」。不自动滚轮切模式
+- 选船槽：代码有 pick_idle_fleet，流程未调用。用当前已选中的船
+- 集结人数：RALLY_PEOPLE_PLUS_CLICKS=0，不改
 
 流程
-1. 点 search.png
-2. 点贡品船页签 button3.png
-3. 等级：LEVEL_DRAGS=0 则不拖（需已对齐）。拖法是按住中间数字上下滑，不要用箭头
-4. 点 button4.png 黄搜寻
-5. 点红色集结 button5.png 打开设置。5 秒内必须看到黄确认 rally_confirm.png，否则再点红集结，最多三次
+1. open_search（同上：先修理，再开搜寻，含邮件挡放大镜）
+2. 点贡品船页签 tab_tribute / button3.png
+3. 等级：LEVEL_DRAGS=0 不拖。拖法是按住中间数字上下滑，不要用箭头
+4. 点黄搜寻。按钮还在就再点，最多 3 次；三次还在就响一声并停止
+5. 点红集结 rally_red / button5.png。5 秒内必须看到黄确认 rally_yellow，否则再点红，最多三次；仍无则重搜
 6. 设置页：
-   - 黄确认=rally_confirm.png（rally_yellow）
-   - 3 分钟：rally_time_block3.png 是暗色 off，点左侧圆点变成绿 on（rally_time_button_on）。变绿后不要再点，否则会 off/on 来回切
+   - 集结时间默认 1 分钟（面板可改 1/3/5/10）。2x2 格子：1/3 上一行、5/10 下一行。已是绿 on 不要再点
    - 人满即出发 / 人数不足解散先不改
-7. 点黄确认出发
-8. 等左侧船队栏（ship.png，HUD 最左边）出现新旗 flag.png = 派出成功。只在这栏找旗，不看大地图、不看设置页船槽
-9. 看到新旗后先拉人，再等旗消失（默认最多 300 秒，config.RALLY_WAIT）：
-   - 点 team.png（组队后出现，HUD 右侧、搜寻上面）
-   - 出现 team_hud，点 invite.png
-   - 出现 invite_hud，点 invite_all.png（邀请全部）
-   - 回到 team_hud，点 back.png
-10. 船队栏这面旗消失 = 打完。成功则写入校准（出场秒数+总耗时），下次自动调等旗/超时（默认超时 300 秒）
-11. 邮件成功：mail.png → 第一条同时有 win + new + loot 才计数。看完 ESC。已知误判：本来就有未读带奖励邮件
+7. 点黄确认。按钮还在就再点，最多 3 次。3 次后页面还在（舰船都不可用时会这样）就响一声并停止，不要去等旗。黄搜寻、查看、邀请全部、返回同样：点完按钮应消失，三次还在就响一声并停止。爪牙攻擊沿用原来的开战确认。
+8. 等船队栏出现新旗 = 派出成功。低于阈值的旗打日志。有新旗、或一直没过线旗，都先拉人（没有 team.png 则跳过）。没过线旗时拉完只短等修理 20 秒，没有就重搜，不用整段集结超时
+9. 有新旗后拉人（没有 team.png 则跳过），再等这面旗消失：
+   - team.png（HUD 右侧、搜寻上面）→ invite.png → invite_all.png → back.png
+10. 旗消失或修理信号写入校准，下次调等旗/超时（默认超时 300 秒）
+11. 邮件计数暂停（MAIL_COUNT=False）。别的舰队自动组队也会带进已成功的邮件，暂时不用 WIN+NEW+LOOT。本轮是否完成只看集结是否走完（旗消失或修理）。函数 check_mail_success 仍留着。
 
-兜底
-- 没有红集结 / 5 秒无黄确认：重搜
-- 没有 team.png：跳过拉人，仍等旗
-- 旗一直不出现：超时后仍查邮件，没有 WIN+NEW+LOOT 不计成功
-- F12 随时停
+兜底：没红集结 / 无黄确认 → 重搜。集结没走完不计成功。F12 随时停
 
 ======== 目标2 100级祈祷舰 ========
-1. 须同时看到 prayer_label/quest_name + invite_yes（对勾）。不要匹配邀请人名字
+1. 须同时看到 prayer_label + invite_yes。不要匹配邀请人名字
 2. 点对勾，不要点 invite_no
-3. 点 button.png 攻击，不要点 button2 传送
-4. 暂按「点了攻击」计数
+3. 点 attack / button.png，不要点 teleport / button2
+4. 暂按「点了攻击」计数（不等打完、不看邮件）
+
+======== 目标3 自动巡逻 ========
+次数=最多轮数（每轮四个猎场星系）。勾选无限则忽略次数，直到找到船或停止。找到静止船并点「查看」、等级通过后提示音，结束。不按 ESC。
+
+1. 后滚（间隔看面板「滚轮」，默认 0.2s）直到同时看到 collection.png + starview_1.png + starview_2.png。最多 40 格
+2. 点 collection.png 打开收藏清单
+3. 点星系名字（不当整页 collection_current.png 当模板）：
+   hunt_area1 斯芬克斯 / hunt_area2 坎沃 / hunt_area3 克鲁格 / hunt_area4 塞尔诺
+4. 再后滚直到三个 HUD 图标出现，然后再后滚 10 格
+5. 找船标：画面和 `pic/ship/tpl/ship_000`–`ship_337` 都按船体 HSV（H28–45 S25–70 V110–210）二值后再配。模板已按角度拉长，不再现场旋转彩色 icon。默认阈值 0.50，面板「船标」越大越像（内部是 1−像素差）。黑底不参与匹配。助手「测试船标」不点鼠标，并把原图、二值图、匹配结果写到 pic/ship/test。勾选「HUD测试」再点开始：只扫当前画面的组件，按「测试显示」秒数后关掉标记。正式跑流程时，每换一帧就清掉上一帧的框，只留这一步的结果。「测试显示」不插入流程等待。和 hud1/hud2/hud3 重叠的命中丢掉。漏检的 8 张在 pic/ship/spare，备用，不参与匹配。
+6. 有船标：等面板「静止」秒（默认 8），位移≤「位移」px（默认 50）视为未动 → 点船标 → 点 look.png「查看」。查看按钮还在就再点，最多 3 次；三次还在就响一声并停止。查看之后在船标附近认等级（见 lvl_digits.txt）。在面板「等级」上下限内（默认 16–22）才算成功并提示音、结束。认出等级但不在范围内则继续找下一艘。没认出等级：日志提醒自己核对，暂时也算成功。在动则忽略这艘，看下一艘
+7. 无静止船：按住游戏客户区正中往上拖 200px，再找一次（步骤 5–6）。仍无则点收藏打开清单，点下一个星系，重复 4–6。四个都完了仍无则再从步骤1开下一轮
 
 ======== 素材 ========
 用：search mail button3 button4 button5 rally_confirm rally_time_block3
     rally_time_button_on/off flag ship team invite invite_all back
     goal0_atk atk repair button button2 invite_yes invite_no prayer_label
     win new loot
-不用整张：target* quest accepted settings box team_hud invite_hud（只作流程说明）
+    chat_tab_on chat_tab_off mgmt_tab_on mgmt_tab_off chat_quote（仅聊天工具）
+    collection starview_1 starview_2 hunt_area1-4 ship_icon（在 pic/ship，不在 stable） look
+    hud_right hud_ship（hud_left.png 先留着，对齐和查找都不用）
+对照不当模板：collection_current.png（整页清单）
+不用整张：target* quest accepted settings box team_hud invite_hud
+
+======== 文档 ========
+流程：current_goal.txt
+各元素在哪找、做不做二值：search_where.txt
+等级数字：lvl_digits.txt（巡逻点完「查看」之后用）
+改代码易踩坑 / 为什么：DECISIONS.md
+助手规则：.cursor/rules/fgf-gotchas.mdc
 
 ======== 操作 ========
 pip install -r requirements.txt
-start.bat / python gui.py        图形界面（推荐管理员）
+start.bat / start_chat.bat（launch.vbs 调 pythonw，不留黑窗口；未提权时先 UAC）
 python bot.py --goal 0 --click --count 10
 python bot.py --goal 1 --click --count 10
 python bot.py --goal 2 --click --count 10
-python verify_match.py
-F12 停止。
-config.py：LEVEL_DRAGS、RALLY_WAIT=300、RALLY_MINUTES=3、TRIBUTE_LEVEL
-calibrate.json：目标0战斗耗时、目标1集结耗时；助手可重置校准
+python bot.py --goal 3 --click --count 10
+python chat_gui.py / start_chat.bat
+  连续截图 TXT：logs/chat/extract_时间.txt
+  实时：logs/chat/guild/ 或 mgmt/ 日期.txt
+F12 停止。开始/停止有提示音
+助手：无限、HUD测试、集结分钟、置信度（船标默认 0.50，越大越像）、滚轮间隔、静止秒/位移、等级上下限、测试显示秒数、屏幕标记、测试船标。退出或点开始时写入 gui_settings.json
+config.py：LEVEL_DRAGS、RALLY_WAIT=300、RALLY_NO_FLAG_WAIT=20、RALLY_MINUTES=1、TRIBUTE_LEVEL、ATK_THRESH=0.95、SHIP_ICON_THRESH=0.50
+calibrate.json：目标0战斗耗时、目标1集结耗时；助手可重置

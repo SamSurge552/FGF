@@ -1,0 +1,17 @@
+---
+description: FGF 改代码时不能拆掉的约束（点击、ESC、模板）
+alwaysApply: true
+---
+
+# FGF 改动约束
+
+流程看 `current_goal.txt`，理由看 `DECISIONS.md`。改之前先对一下，不要为修 A 拆掉 B。
+
+- `capture.screen_click` 必须自己完成：移动、按下、抬起三次 SendInput。禁止把这三行挪到 `screen_key` 或其他函数。改 `_INPUT` 结构后检查 `sizeof(_INPUT)==40`。
+- 点击和 ESC 用 SendInput，不要改回 `pyautogui.click` / `press`。
+- ESC 只关邮件：默认一次；第二次仅当画面上还有 win/new/loot。大地图禁止连按 ESC。
+- 模板匹配，不要上 YOLO。不要把整张场景图当模板。各元素在哪找、做不做二值，只看 `search_where.txt`。改了范围或预处理要同时改这份，不要为这个问题再扫代码。
+- `atk` 和蓝色组队旗只在 `hud_ship`。组队入口 `team.png` 只在 `hud_right`。左 HUD 先不用。
+- 屏幕标记点穿、停止即消失。不要为修闪烁改回整窗每帧 SetWindowPos。
+- 新功能先写 `current_goal.txt`，写好再改代码。
+- 滚轮走 `screen_wheel`，拖图走 `screen_drag`，都不要写进 `screen_click`。`collection_current` 整页不当模板。
