@@ -1139,7 +1139,7 @@ def ship_level_near(frame, hit: Hit) -> tuple[int, float] | None:
         return None
     maps = []
     used = []
-    for lv in levels:
+    for lv in sorted(groups):
         acc = None
         for nd in groups[lv]:
             if nd.shape[0] > crop.shape[0] or nd.shape[1] > crop.shape[1]:

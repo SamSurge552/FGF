@@ -1,8 +1,8 @@
 {
-  "goal": 1,
+  "goal": 3,
   "count": 1,
-  "mode": "scan",
-  "hud_test": true,
+  "mode": "click",
+  "hud_test": false,
   "rally_minutes": 1,
   "thresh": {
     "search": 0.8,
