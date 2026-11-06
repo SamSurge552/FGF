@@ -21,16 +21,21 @@ NO_GLASS = {
     "chat_tab_on",
     "mgmt_tab_on",
     "ship_icon",
+    "storage",
+    "good",
+    "good1",
 }
 
-# 玻璃按钮中间是半透明，背景会变。只拿和中位色差得开的像素（描边/图标）去匹配。
+# 按钮按整张颜色加载，不抠玻璃。只有搜寻另走灰度圆（search_core）。
 GLASS_DIST = 25.0
 GLASS_MIN_FRAC = 0.05
 GLASS_MAX_FRAC = 0.85
 ALPHA_CUT = 16
 # atk 和蓝色组队旗只在船队栏。组队入口 team.png 在右侧 HUD 最上的红旗，不在船队栏。
 SHIP_BAR_ONLY = frozenset({"atk", "flag"})
-RIGHT_HUD_ONLY = frozenset({"team_btn"})
+RIGHT_HUD_ONLY = frozenset({"team_btn", "search"})
+GRAY_MATCH = frozenset({"search"})
+BOTTOM_HUD_ONLY = frozenset({"storage"})
 ROTATE_TEMPLATES = frozenset()
 
 
@@ -183,6 +188,16 @@ def color_binary(frame: np.ndarray, name: str) -> np.ndarray:
     return cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
 
 
+def storage_binary(frame: np.ndarray) -> np.ndarray:
+    """仓储。灰度达到 storage1 的灰色就留白，其余变黑。"""
+    if frame.ndim == 2:
+        gray = frame
+    else:
+        gray = cv2.cvtColor(frame[:, :, :3], cv2.COLOR_BGR2GRAY)
+    mask = np.where(gray >= config.STORAGE_GRAY, 255, 0).astype(np.uint8)
+    return cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+
+
 def color_similarity(frame: np.ndarray, needle_bgr: np.ndarray) -> np.ndarray:
     """二值图全像素参与。黑的地方也必须是黑，否则一块同色就会配成 1.0。"""
     gray = cv2.cvtColor(needle_bgr, cv2.COLOR_BGR2GRAY)
@@ -235,13 +250,38 @@ def _overlap(ax1: int, ay1: int, ax2: int, ay2: int, bx1: int, by1: int, bx2: in
     return ax1 < bx2 and ax2 > bx1 and ay1 < by2 and ay2 > by1
 
 
-def score_map(frame: np.ndarray, needle: Needle) -> np.ndarray:
+def search_core(needle: Needle) -> Needle:
+    """搜寻只比中间的圆。四角是星区，亮暗一变整张分就掉。"""
+    h, w = needle.bgr.shape[:2]
+    mask = np.zeros((h, w), np.uint8)
+    cv2.ellipse(
+        mask,
+        (w // 2, h // 2),
+        (max(1, int(w * 0.35)), max(1, int(h * 0.35))),
+        0,
+        0,
+        360,
+        255,
+        -1,
+    )
+    return Needle(needle.bgr, mask)
+
+
+def score_map(frame: np.ndarray, needle: Needle, gray: bool = False) -> np.ndarray:
     if needle.bgr.shape[0] > frame.shape[0] or needle.bgr.shape[1] > frame.shape[1]:
         return np.zeros((1, 1), np.float32)
-    if needle.mask is None:
-        res = cv2.matchTemplate(frame, needle.bgr, cv2.TM_CCOEFF_NORMED)
+    src = frame
+    bgr = needle.bgr
+    mask = needle.mask
+    if gray:
+        if src.ndim == 3:
+            src = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
+        if bgr.ndim == 3:
+            bgr = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    if mask is None:
+        res = cv2.matchTemplate(src, bgr, cv2.TM_CCOEFF_NORMED)
     else:
-        res = cv2.matchTemplate(frame, needle.bgr, cv2.TM_CCOEFF_NORMED, mask=needle.mask)
+        res = cv2.matchTemplate(src, bgr, cv2.TM_CCOEFF_NORMED, mask=mask)
     return np.nan_to_num(res, nan=0.0, posinf=0.0, neginf=0.0)
 
 
@@ -266,7 +306,7 @@ class Matcher:
         self._ship_hud = load_ship_hud()
         div = int(getattr(config, "SHIP_ROTATE_DIV", 0) or 0)
         for name, path in TEMPLATES.items():
-            needle = load_needle(path, glass=name not in NO_GLASS)
+            needle = load_needle(path, glass=False)
             self.needles[name] = needle
             if name == "ship_icon":
                 angles = load_ship_angles()
@@ -312,11 +352,25 @@ class Matcher:
             y = max(0, h - rh)
         return (x, y, rw, min(rh, h - y))
 
+    def hud_bottom_region(self, frame: np.ndarray) -> tuple[int, int, int, int]:
+        """下方 HUD。整张图不去配。没对齐过时贴在画面底部居中。"""
+        h, w = frame.shape[:2]
+        tw, th = config.HUD_BOTTOM_SIZE
+        rw, rh = min(tw, w), min(th, h)
+        placed = _placed("hud_bottom", rw, rh)
+        if placed is not None:
+            return placed
+        x = max(0, (w - rw) // 2)
+        y = max(0, h - rh)
+        return (x, y, rw, rh)
+
     def _locked_region(self, name: str, frame: np.ndarray) -> tuple[int, int, int, int] | None:
         if name in SHIP_BAR_ONLY:
             return self.hud_ship_region(frame)
         if name in RIGHT_HUD_ONLY:
             return self.hud_ref("hud_right", frame)
+        if name in BOTTOM_HUD_ONLY:
+            return self.hud_bottom_region(frame)
         return None
 
     def search_region(self, name: str, frame: np.ndarray) -> tuple[int, int, int, int] | None:
@@ -326,8 +380,10 @@ class Matcher:
             return locked
         return None
 
-    def find(self, frame: np.ndarray, name: str, thresh: float | None = None) -> Hit | None:
-        hits = self.find_all(frame, name, thresh)
+    def find(
+        self, frame: np.ndarray, name: str, thresh: float | None = None, watch: bool = True
+    ) -> Hit | None:
+        hits = self.find_all(frame, name, thresh, watch=watch)
         return hits[0] if hits else None
 
     def find_in(
@@ -341,10 +397,12 @@ class Matcher:
             return self.find(frame, name, thresh)
         x, y, w, h = region
         crop = frame[y : y + h, x : x + w]
-        hit = self.find(crop, name, thresh)
+        hit = self.find(crop, name, thresh, watch=False)
         if hit is None:
             return None
-        return Hit(hit.name, hit.score, hit.x1 + x, hit.y1 + y, hit.x2 + x, hit.y2 + y)
+        hit = Hit(hit.name, hit.score, hit.x1 + x, hit.y1 + y, hit.x2 + x, hit.y2 + y)
+        self._watch_place(name, [hit])
+        return hit
 
     def find_all_in(
         self,
@@ -357,13 +415,17 @@ class Matcher:
             return self.find_all(frame, name, thresh)
         x, y, w, h = region
         crop = frame[y : y + h, x : x + w]
-        hits = self.find_all(crop, name, thresh)
-        return [
+        hits = self.find_all(crop, name, thresh, watch=False)
+        hits = [
             Hit(hit.name, hit.score, hit.x1 + x, hit.y1 + y, hit.x2 + x, hit.y2 + y)
             for hit in hits
         ]
+        self._watch_place(name, hits)
+        return hits
 
-    def find_all(self, frame: np.ndarray, name: str, thresh: float | None = None) -> list[Hit]:
+    def find_all(
+        self, frame: np.ndarray, name: str, thresh: float | None = None, watch: bool = True
+    ) -> list[Hit]:
         locked = self._locked_region(name, frame)
         if locked is not None:
             x, y, w, h = locked
@@ -371,28 +433,59 @@ class Matcher:
             if crop.size == 0:
                 return []
             raw = self._match_all(crop, name, thresh)
-            return [
+            hits = [
                 Hit(hit.name, hit.score, hit.x1 + x, hit.y1 + y, hit.x2 + x, hit.y2 + y)
                 for hit in raw
             ]
+            if hits:
+                self._note_strict(name, hits, thresh)
+                if watch:
+                    self._watch_place(name, hits)
+            return hits
         hits = self._match_all(frame, name, thresh)
         if name == "ship_icon":
             hits = self._drop_ship_hud(frame, hits)
+        if hits:
+            self._note_strict(name, hits, thresh)
+            if watch:
+                self._watch_place(name, hits)
         return hits
+
+    def _note_strict(self, name: str, hits: list[Hit], thresh: float | None) -> None:
+        """只把过了原阈值的分记进自适应。低 0.1 放进来的不算，免得均分越拉越低。"""
+        best = max(hit.score for hit in hits)
+        strict = config.thresh_for(name) if thresh is None else float(thresh)
+        if best + 1e-9 < strict:
+            return
+        config.note_match(name, best)
+
+    def _watch_place(self, name: str, hits: list[Hit]) -> None:
+        import bot
+
+        for hit in hits:
+            msg = config.note_place(name, hit.center[0], hit.center[1])
+            if msg:
+                bot.note_odd("位置", msg)
 
     def _drop_ship_hud(self, frame: np.ndarray, hits: list[Hit]) -> list[Hit]:
         if not hits or not self._ship_hud:
             return hits
         binary = hull_binary(frame)
         boxes: list[tuple[int, int, int, int]] = []
+        best_hud = None
         for needle in self._ship_hud:
             if needle.bgr.shape[0] > binary.shape[0] or needle.bgr.shape[1] > binary.shape[1]:
                 continue
             res = score_map(binary, needle)
             ys, xs = np.where(res >= config.thresh_for("ship_hud"))
+            if ys.size:
+                score = float(res[ys, xs].max())
+                best_hud = score if best_hud is None else max(best_hud, score)
             nh, nw = needle.bgr.shape[:2]
             for y, x in zip(ys.tolist(), xs.tolist()):
                 boxes.append((int(x), int(y), int(x) + nw, int(y) + nh))
+        if best_hud is not None:
+            config.note_match("ship_hud", best_hud)
         if not boxes:
             return hits
         kept = []
@@ -405,8 +498,11 @@ class Matcher:
     def _match_all(self, frame: np.ndarray, name: str, thresh: float | None = None) -> list[Hit]:
         if thresh is None:
             thresh = config.thresh_for(name)
+        thresh = config.match_floor(name, thresh)
         if name == "ship_icon":
             frame = hull_binary(frame)
+        elif name == "storage":
+            frame = storage_binary(frame)
         elif name in COLOR_BINS:
             frame = color_binary(frame, name)
         cand: list[Hit] = []
@@ -415,10 +511,13 @@ class Matcher:
                 continue
             if name == "ship_icon":
                 res = ship_similarity(frame, needle)
+            elif name == "storage":
+                res = score_map(frame, Needle(storage_binary(needle.bgr), None))
             elif name in COLOR_BINS:
                 res = color_similarity(frame, color_binary(needle.bgr, name))
             else:
-                res = score_map(frame, needle)
+                use = search_core(needle) if name in GRAY_MATCH else needle
+                res = score_map(frame, use, gray=name in GRAY_MATCH)
             loc = np.where(res >= thresh)
             if loc[0].size > 300:
                 scores = res[loc]
@@ -456,6 +555,8 @@ class Matcher:
     def _best_raw(self, frame: np.ndarray, name: str) -> tuple[float, tuple[int, int]]:
         if name == "ship_icon":
             frame = hull_binary(frame)
+        elif name == "storage":
+            frame = storage_binary(frame)
         elif name in COLOR_BINS:
             frame = color_binary(frame, name)
         best_v, best_xy = 0.0, (-1, -1)
@@ -464,10 +565,13 @@ class Matcher:
                 continue
             if name == "ship_icon":
                 res = ship_similarity(frame, needle)
+            elif name == "storage":
+                res = score_map(frame, Needle(storage_binary(needle.bgr), None))
             elif name in COLOR_BINS:
                 res = color_similarity(frame, color_binary(needle.bgr, name))
             else:
-                res = score_map(frame, needle)
+                use = search_core(needle) if name in GRAY_MATCH else needle
+                res = score_map(frame, use, gray=name in GRAY_MATCH)
             _minv, maxv, _minl, maxl = cv2.minMaxLoc(res)
             if float(maxv) > best_v:
                 best_v = float(maxv)

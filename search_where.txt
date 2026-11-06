@@ -2,59 +2,77 @@
 正式流程和 HUD测试用同一套范围（vision.Matcher.search_region）。
 整屏的不画范围框。有范围的，HUD测试会画出青色虚线框，和实际查找的那一块相同。
 
-预处理只有三种：
-- 玻璃：不二值。只拿离中位色较远的像素（描边/图标）去配，半透明底不参与。
+预处理有四种：
+- 原图：不二值。整张颜色都参与。按钮不怎么带会变的背景，电脑之间或 NVIDIA 的整体色差靠匹配算法减平均亮度。
 - 填充色：不二值。整张图的颜色都参与，用来区分开/关。
+- 灰度：先转成亮度再配，不看颜色。
 - 二值：先按颜色或灰度变成白图标、黑底，黑底不参与，再比较。分数越大越像。
 
 名字          设置里的名字    查找范围                         预处理
-search        搜寻            整屏                             玻璃
-search_go     黄搜寻          整屏                             玻璃
-tab_tribute   贡品页签        整屏                             玻璃
-rally_red     红集结          整屏                             玻璃
-rally_yellow  黄确认          整屏                             玻璃
-goal0_atk     爪牙攻擊        整屏                             玻璃
+search        搜寻            右 HUD（对齐后的 hud_right）        灰度，只比中间圆，四角不参与
+search_go     黄搜寻          整屏                             原图
+tab_tribute   贡品页签        整屏                             原图
+tab_claw      爪牙页签        整屏                             原图
+rally_red     红集结          整屏                             原图
+rally_yellow  黄确认          整屏                             原图
+goal0_atk     爪牙攻擊        整屏                             原图
 atk           船队ATK         左侧船队栏（对齐后的 hud_ship）  二值，只留暗红剑
-repair        修理            整屏                             玻璃
-attack        攻击            整屏                             玻璃
-teleport      传送            整屏                             玻璃
-invite_yes    对勾            整屏                             玻璃
-invite_no     拒绝            整屏                             玻璃
-prayer_label  祈祷舰          整屏                             玻璃
+repair        修理            整屏                             原图
+attack        攻击            整屏                             原图
+event1        金币活动        整屏                             原图
+pray100       100             整屏                             原图
+pray100b      100b            整屏。点过 100 后若和港湾重叠会出现   原图
+good          点赞            整屏                             填充色
+good1         点赞成功        整屏                             填充色
+close_btn     关闭            整屏                             原图
+teleport      传送            整屏                             原图
+invite_yes    对勾            整屏                             原图
+invite_no     拒绝            整屏                             原图
+prayer_label  祈祷舰          整屏                             原图
 flag          组队旗          左侧船队栏（对齐后的 hud_ship）  二值，只留浅蓝旗面（H96–112 S145–230 V160–220）。图是 flag.png。黑底也参与，避免同色块配成 1.0
-trading       跑商            整屏                             玻璃
+trading       跑商            整屏                             原图
 team_btn      组队            右 HUD（对齐后的 hud_right）     二值，只留浅色底（H0–15/165–179 S80–160 V220–255）。图是 team.png，不是组队旗。较暗的旗面不收
-invite        邀请            整屏（组队面板打开之后）         玻璃
-invite_all    邀请全部        整屏（邀请面板打开之后）         玻璃
-back          返回            整屏（面板打开之后）             玻璃
+invite        邀请            整屏（组队面板打开之后）         原图
+invite_all    邀请全部        整屏（邀请面板打开之后）         原图
+back          返回            整屏（面板打开之后）             原图
 time_on       集结开          整屏（集结设置页上）             填充色
 time_off      集结关          整屏（集结设置页上）             填充色
 time_3        3分钟块         整屏（集结设置页上）             填充色
-mail          邮件            整屏                             玻璃
-win           胜利            整屏（邮件页里）                 玻璃
-new           未读            整屏（邮件页里）                 玻璃
-loot          奖励            整屏（邮件页里）                 玻璃
-collection    收藏            整屏                             玻璃
-starview_1    星图1           整屏                             玻璃
-starview_2    星图2           整屏                             玻璃
-hunt_area1    斯芬克斯        整屏（收藏清单打开之后）         玻璃
-hunt_area2    坎沃            整屏（收藏清单打开之后）         玻璃
-hunt_area3    克鲁格          整屏（收藏清单打开之后）         玻璃
-hunt_area4    塞尔诺          整屏（收藏清单打开之后）         玻璃
-look          查看            整屏（点过船标之后）             玻璃
+mail          邮件            整屏                             原图
+win           胜利            整屏（邮件页里）                 原图
+new           未读            整屏（邮件页里）                 原图
+loot          奖励            整屏（邮件页里）                 原图
+collection    收藏            整屏                             原图
+starview_1    星图1           整屏                             原图
+starview_2    星图2           整屏                             原图
+hunt_area1    斯芬克斯        整屏（收藏清单打开之后）         原图
+hunt_area2    坎沃            整屏（收藏清单打开之后）         原图
+hunt_area3    克鲁格          整屏（收藏清单打开之后）         原图
+hunt_area4    塞尔诺          整屏（收藏清单打开之后）         原图
+look          查看            整屏（点过船标之后）             原图
 ship_icon     船标            整屏，再丢掉和 hud1/hud2/hud3   二值。船体 HSV：
                               重叠的命中                       H28–45 S25–70 V110–210
                               巡逻、测试船标、HUD测试一样      对 pic/ship/tpl 的 16 张拉长图
                                                                黑底不参与
-lvl           等级            不进 HUD测试。点完「查看」后，   二值。灰度 >= 120 为白字
-                              只在这艘船附近找                 其余为黑。详见 lvl_digits.txt
-                              左160 上140 右160 下80
+lvl           等级数字        不进 HUD测试。点完「查看」后整图找。 二值。灰度 >= 120 为白字
+                              多个命中取离这艘船最近的         其余为黑。详见 lvl_digits.txt
 ship_hud      船标误检        不作为目标。只用来剔除船标      跟船标同一套 HSV 二值
 hud_ship      船队栏          不对整张图做匹配。对齐得到范围   不做
                               组队旗和船队 ATK 在这块里找
 hud_right     （没有单独阈值）不对整张图做匹配。对齐得到范围   不做
                               组队入口在这块里找
 hud_left      （没有单独阈值）先不用。不对齐，也不查找         不做
+storage       仓储            下方 HUD                         二值。灰度 >= 200 为白
+                              模板 pic/stable/storage1.png     200 在 storage1 的灰色里
+                              须能配上 storage0
+ticket_ark    方舟券          整屏                             原图
+use           使用            整屏                             原图
+use2          补充使用        整屏。more.png 出现之后           原图
+ap_more       获得更多        整屏。点集结或攻击后 AP 不够     原图
+hud_bottom    （没有单独阈值）不对整张图做匹配。对齐得到范围   不做
+                              仓储图标在这块里找。没对齐过：
+                              1920x1080 底部居中 (663,924)
+                              大小 593x156
 
 不在上表里、也不参与匹配：pic/ship/spare，collection_current（整页清单）。
 

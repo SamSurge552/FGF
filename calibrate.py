@@ -9,7 +9,9 @@ from typing import Any
 import config
 
 PATH = os.path.join(config.ROOT, "calibrate.json")
-KEEP = 40
+KEEP = 10
+_RECENT = 3
+_TIMEOUT_ADD = 30.0
 
 
 def _empty() -> dict[str, Any]:
@@ -46,6 +48,14 @@ def _durations(samples: list) -> tuple[list[float], list[float]]:
     return durs, apps
 
 
+def _average(durs: list[float]) -> float:
+    """不满 3 次用默认。满了用最近 3 次的中位。"""
+    if len(durs) < _RECENT:
+        return float(config.DEFAULT_AVG_WAIT)
+    recent = sorted(durs[-_RECENT:])
+    return recent[len(recent) // 2]
+
+
 def timeouts_goal0() -> dict[str, float]:
     durs, apps = _durations(load()["goal0"])
     appear_wait = float(config.ATK_APPEAR_WAIT)
@@ -53,20 +63,21 @@ def timeouts_goal0() -> dict[str, float]:
     gone_wait = float(config.ATK_GONE_WAIT)
     gone_confirm = float(config.ATK_GONE_CONFIRM)
     if apps:
-        appear_wait = min(40.0, max(8.0, max(apps) * 2.2 + 1.0))
-    if durs:
-        d = sorted(durs)
-        med, mx = d[len(d) // 2], d[-1]
-        min_fight = min(35.0, max(4.0, med * 0.35))
-        gone_wait = min(420.0, max(50.0, mx * 1.7 + 12.0))
+        recent_apps = apps[-_RECENT:]
+        appear_wait = min(40.0, max(8.0, max(recent_apps) * 2.2 + 1.0))
+    if len(durs) >= _RECENT:
+        recent = durs[-_RECENT:]
+        med = sorted(recent)[len(recent) // 2]
         gone_confirm = min(2.5, max(1.0, med * 0.05))
+    if durs:
+        gone_wait = min(420.0, max(durs) + _TIMEOUT_ADD)
     return {
         "appear_wait": appear_wait,
         "min_fight": min_fight,
         "gone_wait": gone_wait,
         "gone_confirm": gone_confirm,
         "samples": float(len(durs)),
-        "median": (sorted(durs)[len(durs) // 2] if durs else 0.0),
+        "median": _average(durs),
     }
 
 
@@ -75,22 +86,23 @@ def timeouts_goal1() -> dict[str, float]:
     appear_wait = 25.0
     gone_wait = float(config.RALLY_WAIT)
     gone_confirm = 2.0
-    min_rally = 8.0
+    min_rally = float(config.DEFAULT_AVG_WAIT)
     if apps:
-        appear_wait = min(45.0, max(10.0, max(apps) * 2.2 + 1.0))
-    if durs:
-        d = sorted(durs)
-        med, mx = d[len(d) // 2], d[-1]
-        min_rally = min(90.0, max(8.0, med * 0.25))
-        gone_wait = min(480.0, max(90.0, mx * 1.5 + 20.0))
+        recent_apps = apps[-_RECENT:]
+        appear_wait = min(45.0, max(10.0, max(recent_apps) * 2.2 + 1.0))
+    if len(durs) >= _RECENT:
+        recent = durs[-_RECENT:]
+        med = sorted(recent)[len(recent) // 2]
         gone_confirm = min(3.0, max(1.2, med * 0.02))
+    if durs:
+        gone_wait = min(480.0, max(durs) + _TIMEOUT_ADD)
     return {
         "appear_wait": appear_wait,
         "min_rally": min_rally,
         "gone_wait": gone_wait,
         "gone_confirm": gone_confirm,
         "samples": float(len(durs)),
-        "median": (sorted(durs)[len(durs) // 2] if durs else 0.0),
+        "median": _average(durs),
     }
 
 
@@ -100,11 +112,12 @@ def timeouts() -> dict[str, float]:
 
 def _record(goal: str, appear_s: float | None, duration_s: float, reason: str) -> None:
     data = load()
+    value = round(float(duration_s), 2)
     data[goal].append(
         {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "appear_s": None if appear_s is None else round(float(appear_s), 2),
-            "duration_s": round(float(duration_s), 2),
+            "duration_s": value,
             "reason": reason,
         }
     )

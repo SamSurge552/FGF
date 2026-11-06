@@ -6,12 +6,12 @@ import os
 import sys
 import threading
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 import bot
 import calibrate
 import config
-from capture import focus_window, is_admin, list_windows, pick_game_window, relaunch_as_admin
+from capture import is_admin, list_windows, pick_game_window, relaunch_as_admin
 
 SETTINGS_PATH = os.path.join(config.ROOT, "gui_settings.json")
 
@@ -19,8 +19,10 @@ SETTINGS_PATH = os.path.join(config.ROOT, "gui_settings.json")
 GOALS = (
     (0, "0  爪牙"),
     (1, "1  贡品"),
-    (2, "2  祈祷"),
+    (2, "2  祈祷船"),
     (3, "3  巡逻"),
+    (4, "4  方舟"),
+    (5, "5  金币"),
 )
 
 
@@ -29,7 +31,6 @@ class App(tk.Tk):
         super().__init__()
         admin = is_admin()
         self.title("FGF 助手" + ("（管理员）" if admin else "（普通权限）"))
-        self.geometry("520x620+12+12")
         self.minsize(480, 480)
         self.attributes("-topmost", True)
         self.running = False
@@ -37,21 +38,48 @@ class App(tk.Tk):
 
         self._spins: list[ttk.Spinbox] = []
         saved = load_gui_settings()
+        self._win_geom: dict[str, str] = {
+            key: value
+            for key, value in (saved.get("windows") or {}).items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+        self.geometry(self._win_geom.get("main") or "520x620+12+12")
         self.goal = tk.IntVar(value=saved["goal"])
         self.count = tk.IntVar(value=saved["count"])
         self.mode = tk.StringVar(value="scan" if saved.get("mode") == "scan" or saved.get("hud_test") else "click")
         self.hud_test = tk.BooleanVar(value=self.mode.get() == "scan")
         self.infinite = tk.BooleanVar(value=bool(saved.get("infinite", False)))
+        self.use_queue = tk.BooleanVar(value=bool(saved.get("use_queue", False)))
+        self.queue: list[dict] = list(saved.get("queue") or [])
+        self.watch_only = tk.BooleanVar(value=bool(saved.get("watch_only", False)))
         self.rally_minutes = tk.IntVar(value=saved["rally_minutes"])
         self.thresh_vars: dict[str, tk.DoubleVar] = {}
         saved_thresh = saved.get("thresh") or {}
         for key, _label, default in config.THRESH_FIELDS:
             self.thresh_vars[key] = tk.DoubleVar(value=float(saved_thresh.get(key, default)))
+
+        def _on_thresh(name: str, value: float) -> None:
+            def apply() -> None:
+                var = self.thresh_vars.get(name)
+                if var is None:
+                    return
+                try:
+                    current = float(var.get())
+                except (tk.TclError, ValueError):
+                    current = value
+                if abs(current - value) >= 0.005:
+                    var.set(value)
+
+            self.after(0, apply)
+
+        config.watch_thresh(_on_thresh)
         self.ship_still_sec = tk.IntVar(value=int(saved.get("ship_still_sec", 8)))
         self.ship_still_px = tk.IntVar(value=int(saved.get("ship_still_px", 50)))
+        self.ship_click_above = tk.IntVar(value=int(saved.get("ship_click_above", 50)))
         self.lvl_min = tk.IntVar(value=int(saved.get("lvl_min", 16)))
         self.lvl_max = tk.IntVar(value=int(saved.get("lvl_max", 22)))
         self.wheel_pause = tk.DoubleVar(value=float(saved.get("wheel_pause", 0.2)))
+        self.focus_settle = tk.DoubleVar(value=float(saved.get("focus_settle", 0.2)))
         self.mark_preview_sec = tk.IntVar(value=int(saved.get("mark_preview_sec", 5)))
         self.show_marks = tk.BooleanVar(value=bool(saved.get("show_marks", True)))
 
@@ -61,8 +89,12 @@ class App(tk.Tk):
 
         gbox = ttk.LabelFrame(frm, text="目标")
         gbox.pack(fill=tk.X, **pad)
-        for val, label in GOALS:
-            ttk.Radiobutton(gbox, text=label, variable=self.goal, value=val).pack(side=tk.LEFT, padx=8, pady=6)
+        for i, (val, label) in enumerate(GOALS):
+            ttk.Radiobutton(gbox, text=label, variable=self.goal, value=val).grid(
+                row=i // 3, column=i % 3, sticky=tk.W, padx=8, pady=4
+            )
+        for col in range(3):
+            gbox.columnconfigure(col, weight=1)
 
         row = ttk.Frame(frm)
         row.pack(fill=tk.X, **pad)
@@ -71,26 +103,43 @@ class App(tk.Tk):
 
         mbox = ttk.LabelFrame(frm, text="动作")
         mbox.pack(fill=tk.X, **pad)
-        ttk.Checkbutton(mbox, text="HUD测试", variable=self.hud_test).pack(side=tk.LEFT, padx=8, pady=6)
-        ttk.Checkbutton(mbox, text="无限", variable=self.infinite).pack(side=tk.LEFT, padx=8, pady=6)
-        ttk.Checkbutton(mbox, text="屏幕标记", variable=self.show_marks, command=self.on_marks).pack(
-            side=tk.LEFT, padx=12, pady=6
+        checks = (
+            ("HUD测试", self.hud_test, None),
+            ("无限", self.infinite, None),
+            ("编排", self.use_queue, None),
+            ("只看不打", self.watch_only, None),
+            ("屏幕标记", self.show_marks, self.on_marks),
         )
+        for i, (text, var, cmd) in enumerate(checks):
+            kwargs = {"text": text, "variable": var}
+            if cmd is not None:
+                kwargs["command"] = cmd
+            ttk.Checkbutton(mbox, **kwargs).grid(row=i // 3, column=i % 3, sticky=tk.W, padx=8, pady=4)
+        for col in range(3):
+            mbox.columnconfigure(col, weight=1)
 
-        btns = ttk.Frame(frm)
-        btns.pack(fill=tk.X, **pad)
-        self.btn_start = ttk.Button(btns, text="开始", command=self.start)
-        self.btn_start.pack(side=tk.LEFT)
-        self.btn_stop = ttk.Button(btns, text="停止", command=self.stop, state=tk.DISABLED)
-        self.btn_stop.pack(side=tk.LEFT, padx=8)
-        ttk.Label(btns, text="F12 也能停").pack(side=tk.LEFT, padx=8)
-        tools = ttk.Frame(frm)
-        tools.pack(fill=tk.X, **pad)
-        ttk.Button(tools, text="设置", command=self.open_settings).pack(side=tk.LEFT, padx=(0, 4))
-        ttk.Button(tools, text="对齐HUD", command=self.align_panels).pack(side=tk.LEFT, padx=4)
-        ttk.Button(tools, text="重置校准", command=self.reset_cal).pack(side=tk.LEFT, padx=4)
+        bbox = ttk.LabelFrame(frm, text="按钮")
+        bbox.pack(fill=tk.X, **pad)
+        self.btn_start = ttk.Button(bbox, text="开始", command=self.start)
+        self.btn_start.grid(row=0, column=0, sticky=tk.W, padx=8, pady=4)
+        self.btn_stop = ttk.Button(bbox, text="停止", command=self.stop, state=tk.DISABLED)
+        self.btn_stop.grid(row=0, column=1, sticky=tk.W, padx=8, pady=4)
+        ttk.Label(bbox, text="F12 也能停").grid(row=0, column=2, sticky=tk.W, padx=8, pady=4)
+        tool_buttons = [
+            ("设置", self.open_settings),
+            ("编排", self.open_queue),
+            ("对齐HUD", self.align_panels),
+            ("重置校准", self.reset_cal),
+            ("异常记录", self.show_odd),
+        ]
         if not admin:
-            ttk.Button(tools, text="以管理员运行", command=self.elevate).pack(side=tk.LEFT, padx=4)
+            tool_buttons.append(("以管理员运行", self.elevate))
+        for i, (text, cmd) in enumerate(tool_buttons):
+            ttk.Button(bbox, text=text, command=cmd).grid(
+                row=1 + i // 3, column=i % 3, sticky=tk.W, padx=8, pady=4
+            )
+        for col in range(3):
+            bbox.columnconfigure(col, weight=1)
 
         logbox = ttk.LabelFrame(frm, text="日志")
         logbox.pack(fill=tk.BOTH, expand=True, **pad)
@@ -113,6 +162,7 @@ class App(tk.Tk):
             f"船标{float(saved.get('thresh', {}).get('ship_icon', 0.50)):.2f}  "
             f"组队{float(saved.get('thresh', {}).get('team_btn', 0.82)):.2f}  "
             f"静止{int(saved.get('ship_still_sec', 8))}s/{int(saved.get('ship_still_px', 50))}px  "
+            f"点船上{int(saved.get('ship_click_above', 50))}px  "
             f"等级{int(saved.get('lvl_min', 16))}-{int(saved.get('lvl_max', 22))}  "
             f"滚轮{float(saved.get('wheel_pause', 0.2)):.2f}s"
         )
@@ -120,12 +170,12 @@ class App(tk.Tk):
         t0 = calibrate.timeouts_goal0()
         t1 = calibrate.timeouts_goal1()
         self.append_log(
-            f"爪牙校准 样本{int(t0['samples'])} 中位{t0['median']:.1f}s  "
-            f"最短{t0['min_fight']:.0f}s 超时{t0['gone_wait']:.0f}s"
+            f"爪牙校准 样本{int(t0['samples'])} 平均{t0['median']:.1f}s  "
+            f"超时{t0['gone_wait']:.0f}s"
         )
         self.append_log(
-            f"贡品校准 样本{int(t1['samples'])} 中位{t1['median']:.1f}s  "
-            f"出场{t1['appear_wait']:.0f}s 最短{t1['min_rally']:.0f}s 超时{t1['gone_wait']:.0f}s"
+            f"贡品校准 样本{int(t1['samples'])} 平均{t1['median']:.1f}s  "
+            f"出场{t1['appear_wait']:.0f}s 超时{t1['gone_wait']:.0f}s"
         )
         self.show_windows()
 
@@ -177,28 +227,42 @@ class App(tk.Tk):
             count = 10
         count = max(1, min(99, count))
         self.count.set(count)
+        if self.use_queue.get() and not self.queue:
+            self.append_log("编排是空的，先点「编排」加上要跑的功能。")
+            return
         mode = "scan" if self.hud_test.get() else "click"
         goal = int(self.goal.get())
         click = mode == "click"
+        queue = [dict(step) for step in self.queue] if self.use_queue.get() else None
         self.set_running(True)
         bot.cue_start()
         applied = self.apply_settings()
         self.save_settings()
-        self.append_log(
-            f"开始  目标{goal}  次数{count}{'  无限' if applied.get('infinite') else ''}  模式={mode}"
-        )
+        if queue:
+            brief = "  ".join(
+                f"{step['goal']}x{1 if applied.get('infinite') else step['count']}" for step in queue
+            )
+            self.append_log(
+                f"开始  编排 {brief}"
+                f"{'  循环' if applied.get('infinite') else ''}"
+                f"{'  只看不打' if applied.get('watch_only') else ''}  模式={mode}"
+            )
+        else:
+            self.append_log(
+                f"开始  目标{goal}  次数{count}"
+                f"{'  无限' if applied.get('infinite') else ''}"
+                f"{'  只看不打' if applied.get('watch_only') else ''}  模式={mode}"
+            )
         self._delay = None
         if click:
-            rect = pick_game_window()
-            focus_window(rect)
-            self.append_log("已切到游戏，2 秒后动手（别点助手）")
-            self._delay = self.after(2000, lambda: self._spawn(goal, count, click, False))
+            self.append_log("2 秒后动手。点的时候会短暂切到游戏，点完切回来。")
+            self._delay = self.after(2000, lambda: self._spawn(goal, count, click, False, queue))
         else:
             import overlay
 
             overlay.attach(self)
             self.append_log("HUD测试：标出当前能匹配到的组件，到测试显示秒数或点一下后关")
-            self._spawn(goal, count, click, False)
+            self._spawn(goal, count, click, False, queue)
 
     def _spin(self, parent, **kwargs) -> ttk.Spinbox:
         spin = ttk.Spinbox(parent, **kwargs)
@@ -244,11 +308,82 @@ class App(tk.Tk):
         var.set(value)
         return value
 
+    def _open_thresh(self, parent: tk.Toplevel, spins: list[ttk.Spinbox]) -> None:
+        existing = getattr(self, "_thresh_win", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.lift()
+                    return
+            except tk.TclError:
+                pass
+        win = tk.Toplevel(parent)
+        self._thresh_win = win
+        win.title("阈值")
+        self._track_window(win, "thresh", "760x640+80+40")
+        win.transient(parent)
+
+        def spin(owner, **kwargs) -> ttk.Spinbox:
+            box = ttk.Spinbox(owner, **kwargs)
+            spins.append(box)
+            return box
+
+        canvas = tk.Canvas(win, highlightthickness=0)
+        scroll = ttk.Scrollbar(win, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        inner = ttk.Frame(canvas, padding=12)
+        window_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def fit(event) -> None:
+            canvas.itemconfigure(window_id, width=event.width)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        canvas.bind("<Configure>", fit)
+        inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        ttk.Label(inner, text="满 5 次后自动改成均分 - 0.1。右边是最近 5 次平均分。").pack(anchor=tk.W, pady=(0, 8))
+        grid = ttk.Frame(inner)
+        grid.pack(fill=tk.X)
+        avg_labels: dict[str, ttk.Label] = {}
+        for i, (key, label, _default) in enumerate(config.THRESH_FIELDS):
+            cell = ttk.Frame(grid)
+            cell.grid(row=i // 2, column=i % 2, sticky=tk.W, padx=8, pady=3)
+            ttk.Label(cell, text=label, width=10, anchor=tk.W).pack(side=tk.LEFT)
+            spin(cell, from_=0.40, to=0.99, increment=0.01, textvariable=self.thresh_vars[key], width=6).pack(
+                side=tk.LEFT, padx=6
+            )
+            avg = ttk.Label(cell, text=config.recent_text(key), width=9, anchor=tk.W)
+            avg.pack(side=tk.LEFT)
+            avg_labels[key] = avg
+
+        def refresh_avg() -> None:
+            if not win.winfo_exists():
+                return
+            for key, lab in avg_labels.items():
+                lab.configure(text=config.recent_text(key))
+            win.after(500, refresh_avg)
+
+        refresh_avg()
+
+    def _track_window(self, widget: tk.Misc, key: str, fallback: str) -> None:
+        widget.geometry(self._win_geom.get(key) or fallback)
+
+        def close() -> None:
+            try:
+                self._win_geom[key] = widget.geometry()
+            except tk.TclError:
+                pass
+            self.save_settings()
+            widget.destroy()
+
+        widget.protocol("WM_DELETE_WINDOW", close)
+
     def open_settings(self) -> None:
         win = tk.Toplevel(self)
         win.title("设置")
-        win.geometry("760x820+40+20")
-        win.minsize(760, 640)
+        self._track_window(win, "settings", "760x420+40+20")
+        win.minsize(640, 360)
         win.transient(self)
         spins: list[ttk.Spinbox] = []
 
@@ -278,13 +413,9 @@ class App(tk.Tk):
         canvas.bind("<Configure>", fit)
         inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        thresh_box = ttk.LabelFrame(inner, text="阈值（越大越严）")
-        thresh_box.pack(fill=tk.X, pady=(0, 8))
-        for i, (key, label, _default) in enumerate(config.THRESH_FIELDS):
-            cell = ttk.Frame(thresh_box)
-            cell.grid(row=i // 2, column=i % 2, sticky=tk.W, padx=12, pady=3)
-            ttk.Label(cell, text=label, width=10, anchor=tk.W).pack(side=tk.LEFT)
-            spin(cell, from_=0.40, to=0.99, increment=0.01, textvariable=self.thresh_vars[key], width=6).pack(side=tk.LEFT, padx=6)
+        thresh_row = ttk.Frame(inner)
+        thresh_row.pack(fill=tk.X, pady=(0, 8))
+        ttk.Button(thresh_row, text="阈值", command=lambda: self._open_thresh(win, spins)).pack(side=tk.LEFT)
 
         misc = ttk.LabelFrame(inner, text="其它")
         misc.pack(fill=tk.X, pady=(0, 8))
@@ -295,6 +426,9 @@ class App(tk.Tk):
         ttk.Label(row1, text="秒").pack(side=tk.LEFT)
         ttk.Label(row1, text="位移").pack(side=tk.LEFT, padx=(16, 4))
         spin(row1, from_=1, to=300, textvariable=self.ship_still_px, width=5).pack(side=tk.LEFT)
+        ttk.Label(row1, text="px").pack(side=tk.LEFT, padx=4)
+        ttk.Label(row1, text="点船上").pack(side=tk.LEFT, padx=(16, 4))
+        spin(row1, from_=0, to=300, textvariable=self.ship_click_above, width=5).pack(side=tk.LEFT)
         ttk.Label(row1, text="px").pack(side=tk.LEFT, padx=4)
         ttk.Label(row1, text="等级").pack(side=tk.LEFT, padx=(16, 4))
         spin(row1, from_=1, to=99, textvariable=self.lvl_min, width=4).pack(side=tk.LEFT)
@@ -308,6 +442,9 @@ class App(tk.Tk):
         ttk.Label(row2, text="测试显示").pack(side=tk.LEFT, padx=(16, 4))
         spin(row2, from_=1, to=30, textvariable=self.mark_preview_sec, width=4).pack(side=tk.LEFT)
         ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=4)
+        ttk.Label(row2, text="切前台").pack(side=tk.LEFT, padx=(16, 4))
+        spin(row2, from_=0.00, to=2.00, increment=0.05, textvariable=self.focus_settle, width=5).pack(side=tk.LEFT)
+        ttk.Label(row2, text="秒").pack(side=tk.LEFT, padx=4)
 
         def ok() -> None:
             for box in spins:
@@ -318,6 +455,10 @@ class App(tk.Tk):
                 except tk.TclError:
                     pass
             self.apply_settings()
+            try:
+                self._win_geom["settings"] = win.geometry()
+            except tk.TclError:
+                pass
             self.save_settings()
             win.destroy()
 
@@ -343,8 +484,10 @@ class App(tk.Tk):
         config.publish_thresh()
         still_sec = self._clamp_int(self.ship_still_sec, 1, 30, 8)
         still_px = self._clamp_int(self.ship_still_px, 1, 300, 50)
+        click_above = self._clamp_int(self.ship_click_above, 0, 300, 50)
         config.SHIP_STILL_SEC = float(still_sec)
         config.SHIP_STILL_PX = still_px
+        config.SHIP_CLICK_ABOVE = click_above
         lvl_min = self._clamp_int(self.lvl_min, 1, 99, 16)
         lvl_max = self._clamp_int(self.lvl_max, 1, 99, 22)
         if lvl_min > lvl_max:
@@ -355,33 +498,121 @@ class App(tk.Tk):
         config.LVL_MAX = lvl_max
         wheel = self._clamp_span(self.wheel_pause, 0.05, 1.00, 0.20)
         config.WHEEL_PAUSE = wheel
+        settle = self._clamp_span(self.focus_settle, 0.00, 2.00, 0.20)
+        config.FOCUS_SETTLE = settle
         preview = self._clamp_int(self.mark_preview_sec, 1, 30, 5)
         config.MARK_PREVIEW_SEC = preview
         config.INFINITE = bool(self.infinite.get())
+        config.WATCH_ONLY = bool(self.watch_only.get())
         return {
             "minutes": minutes,
             "thresh": thresh,
             "still_sec": still_sec,
             "still_px": still_px,
+            "click_above": click_above,
             "lvl_min": lvl_min,
             "lvl_max": lvl_max,
             "wheel": wheel,
+            "settle": settle,
             "preview": preview,
             "infinite": config.INFINITE,
+            "watch_only": config.WATCH_ONLY,
         }
 
-    def _spawn(self, goal: int, count: int, click: bool, dry: bool) -> None:
+    def _spawn(
+        self,
+        goal: int,
+        count: int,
+        click: bool,
+        dry: bool,
+        queue: list[dict] | None = None,
+    ) -> None:
         self._delay = None
 
         def work() -> None:
             try:
-                bot.run_session(goal=goal, count=count, click=click, dry=dry)
+                bot.run_session(
+                    goal=goal,
+                    count=count,
+                    click=click,
+                    dry=dry,
+                    queue=queue,
+                    use_queue=bool(queue),
+                )
             except Exception as exc:
                 bot.log(f"出错: {exc}")
             finally:
                 self.after(0, lambda: self.set_running(False))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def open_queue(self) -> None:
+        names = dict(GOALS)
+        win = tk.Toplevel(self)
+        win.title("编排")
+        self._track_window(win, "queue", "420x480+60+40")
+        lb = tk.Listbox(win, height=12)
+        lb.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 4))
+
+        def refresh() -> None:
+            lb.delete(0, tk.END)
+            for i, step in enumerate(self.queue, start=1):
+                lb.insert(tk.END, f"{i}. {names.get(step['goal'], step['goal'])}  ×{step['count']}")
+
+        refresh()
+        row = ttk.Frame(win)
+        row.pack(fill=tk.X, padx=10, pady=4)
+        count_var = tk.IntVar(value=1)
+        pick = tk.StringVar(value=GOALS[0][1])
+        ttk.Combobox(
+            row, textvariable=pick, state="readonly", width=12, values=[label for _v, label in GOALS]
+        ).pack(side=tk.LEFT)
+        ttk.Label(row, text="次数").pack(side=tk.LEFT, padx=(8, 4))
+        box = self._spin(row, from_=1, to=99, textvariable=count_var, width=5)
+        box.pack(side=tk.LEFT)
+
+        def selected_goal() -> int:
+            label = pick.get()
+            for val, text in GOALS:
+                if text == label:
+                    return val
+            return 0
+
+        def add() -> None:
+            try:
+                count = int(box.get())
+            except (tk.TclError, ValueError):
+                count = 1
+            count = max(1, min(99, count))
+            count_var.set(count)
+            self.queue.append({"goal": selected_goal(), "count": count})
+            refresh()
+
+        def remove() -> None:
+            sel = lb.curselection()
+            if not sel:
+                return
+            del self.queue[sel[0]]
+            refresh()
+
+        def move(delta: int) -> None:
+            sel = lb.curselection()
+            if not sel:
+                return
+            i = sel[0]
+            j = i + delta
+            if j < 0 or j >= len(self.queue):
+                return
+            self.queue[i], self.queue[j] = self.queue[j], self.queue[i]
+            refresh()
+            lb.selection_set(j)
+
+        bar = ttk.Frame(win)
+        bar.pack(fill=tk.X, padx=10, pady=(4, 10))
+        ttk.Button(bar, text="添加", command=add).pack(side=tk.LEFT)
+        ttk.Button(bar, text="删除", command=remove).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bar, text="上移", command=lambda: move(-1)).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bar, text="下移", command=lambda: move(1)).pack(side=tk.LEFT)
 
     def stop(self) -> None:
         bot.STOP.set()
@@ -394,6 +625,53 @@ class App(tk.Tk):
             self._delay = None
             self.set_running(False)
         self.append_log("正在停止…")
+
+    def show_odd(self) -> None:
+        folder = os.path.join(config.ROOT, "logs", "odd")
+        win = tk.Toplevel(self)
+        win.title("异常记录")
+        self._track_window(win, "odd", "720x480")
+        bar = ttk.Frame(win)
+        bar.pack(fill=tk.X)
+        text = tk.Text(win, wrap=tk.WORD)
+        scroll = ttk.Scrollbar(win, command=text.yview)
+        text.configure(yscrollcommand=scroll.set)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        text.pack(fill=tk.BOTH, expand=True)
+
+        def load() -> None:
+            chunks: list[str] = []
+            if os.path.isdir(folder):
+                names = sorted((n for n in os.listdir(folder) if n.endswith(".txt")), reverse=True)
+                for name in names[:7]:
+                    try:
+                        with open(os.path.join(folder, name), encoding="utf-8") as f:
+                            lines = [line for line in f.read().splitlines() if line.strip()]
+                    except OSError:
+                        continue
+                    if lines:
+                        body = "\n".join(reversed(lines))
+                        chunks.append(f"==== {name} ====\n{body}")
+            text.configure(state=tk.NORMAL)
+            text.delete("1.0", tk.END)
+            text.insert("1.0", "\n\n".join(chunks) if chunks else "还没有异常记录")
+            text.configure(state=tk.DISABLED)
+
+        def clear() -> None:
+            if not messagebox.askyesno("清空", "删掉全部异常记录？", parent=win):
+                return
+            if os.path.isdir(folder):
+                for name in os.listdir(folder):
+                    if name.endswith(".txt"):
+                        try:
+                            os.remove(os.path.join(folder, name))
+                        except OSError:
+                            pass
+            load()
+            self.append_log("已清空异常记录")
+
+        ttk.Button(bar, text="清空", command=clear).pack(side=tk.RIGHT, padx=6, pady=4)
+        load()
 
     def reset_cal(self) -> None:
         calibrate.reset()
@@ -428,7 +706,9 @@ class App(tk.Tk):
             else:
                 x, y, _w, _h = matcher.hud_ref(name, frame)
             specs.append((name, config.TEMPLATES[name], x, y))
-        self.append_log("拖动半透明 HUD 对齐游戏，点「完成」保存。平时不再画这三块框。")
+        bx, by, _bw, _bh = matcher.hud_bottom_region(frame)
+        specs.append(("hud_bottom", config.HUD_BOTTOM, bx, by))
+        self.append_log("拖动半透明 HUD 对齐游戏，点「完成」保存。平时不再画这些框。")
 
         def done(data) -> None:
             if not data:
@@ -473,7 +753,9 @@ class App(tk.Tk):
             goal = int(self.goal.get())
         except (tk.TclError, ValueError):
             goal = 0
-        if goal not in (0, 1, 2, 3):
+        if goal == 6:
+            goal = 2
+        if goal not in (0, 1, 2, 3, 4, 5):
             goal = 0
         mode = "scan" if self.hud_test.get() else "click"
         applied = self.apply_settings()
@@ -486,18 +768,29 @@ class App(tk.Tk):
             "thresh": applied["thresh"],
             "ship_still_sec": int(applied["still_sec"]),
             "ship_still_px": int(applied["still_px"]),
+            "ship_click_above": int(applied["click_above"]),
             "lvl_min": int(applied["lvl_min"]),
             "lvl_max": int(applied["lvl_max"]),
             "wheel_pause": float(applied["wheel"]),
+            "focus_settle": float(applied["settle"]),
             "mark_preview_sec": int(applied["preview"]),
             "infinite": bool(applied["infinite"]),
+            "watch_only": bool(applied["watch_only"]),
+            "use_queue": bool(self.use_queue.get()),
+            "queue": [dict(step) for step in self.queue],
             "show_marks": bool(self.show_marks.get()),
+            "recent_scores": config.recent_snapshot(),
+            "windows": dict(self._win_geom),
         }
 
     def save_settings(self) -> None:
         write_gui_settings(self.collect_settings())
 
     def on_close(self) -> None:
+        try:
+            self._win_geom["main"] = self.geometry()
+        except tk.TclError:
+            pass
         try:
             self.save_settings()
         except Exception:
@@ -524,12 +817,18 @@ def _default_settings() -> dict:
         "thresh": {key: float(value) for key, _label, value in config.THRESH_FIELDS},
         "ship_still_sec": int(config.SHIP_STILL_SEC),
         "ship_still_px": int(config.SHIP_STILL_PX),
+        "ship_click_above": int(config.SHIP_CLICK_ABOVE),
         "lvl_min": int(config.LVL_MIN),
         "lvl_max": int(config.LVL_MAX),
         "wheel_pause": float(config.WHEEL_PAUSE),
+        "focus_settle": float(config.FOCUS_SETTLE),
         "mark_preview_sec": int(config.MARK_PREVIEW_SEC),
         "show_marks": True,
         "infinite": False,
+        "watch_only": False,
+        "use_queue": False,
+        "queue": [],
+        "windows": {},
     }
 
 
@@ -551,7 +850,9 @@ def load_gui_settings() -> dict:
     except (OSError, json.JSONDecodeError):
         return data
     goal = int(raw.get("goal", data["goal"]))
-    data["goal"] = goal if goal in (0, 1, 2, 3) else 0
+    if goal == 6:
+        goal = 2
+    data["goal"] = goal if goal in (0, 1, 2, 3, 4, 5) else 0
     data["count"] = int(_clamp(raw.get("count", data["count"]), 1, 99, 10))
     if "hud_test" in raw:
         data["mode"] = "scan" if raw.get("hud_test") else "click"
@@ -560,16 +861,38 @@ def load_gui_settings() -> dict:
         data["mode"] = mode if mode in ("click", "scan") else "click"
     data["show_marks"] = bool(raw.get("show_marks", True))
     data["infinite"] = bool(raw.get("infinite", False))
+    data["watch_only"] = bool(raw.get("watch_only", False))
+    data["use_queue"] = bool(raw.get("use_queue", False))
+    queue = []
+    for step in raw.get("queue") or []:
+        if not isinstance(step, dict):
+            continue
+        try:
+            goal = int(step.get("goal"))
+            count = int(step.get("count"))
+        except (TypeError, ValueError):
+            continue
+        if goal not in (0, 1, 2, 3, 4, 5):
+            continue
+        queue.append({"goal": goal, "count": max(1, min(99, count))})
+    data["queue"] = queue
+    windows = raw.get("windows")
+    if isinstance(windows, dict):
+        data["windows"] = {
+            key: value for key, value in windows.items() if isinstance(key, str) and isinstance(value, str)
+        }
     minutes = int(raw.get("rally_minutes", data["rally_minutes"]))
     data["rally_minutes"] = minutes if minutes in config.RALLY_MINUTES_CHOICES else 1
     data["mark_preview_sec"] = int(_clamp(raw.get("mark_preview_sec", data["mark_preview_sec"]), 1, 30, 5))
     data["ship_still_sec"] = int(_clamp(raw.get("ship_still_sec", data["ship_still_sec"]), 1, 30, 8))
     data["ship_still_px"] = int(_clamp(raw.get("ship_still_px", data["ship_still_px"]), 1, 300, 50))
+    data["ship_click_above"] = int(_clamp(raw.get("ship_click_above", data["ship_click_above"]), 0, 300, 50))
     data["lvl_min"] = int(_clamp(raw.get("lvl_min", data["lvl_min"]), 1, 99, 16))
     data["lvl_max"] = int(_clamp(raw.get("lvl_max", data["lvl_max"]), 1, 99, 22))
     if data["lvl_min"] > data["lvl_max"]:
         data["lvl_min"], data["lvl_max"] = data["lvl_max"], data["lvl_min"]
     data["wheel_pause"] = round(_clamp(raw.get("wheel_pause", data["wheel_pause"]), 0.05, 1.00, 0.20), 2)
+    data["focus_settle"] = round(_clamp(raw.get("focus_settle", data["focus_settle"]), 0.00, 2.00, 0.20), 2)
     legacy = {
         "search_thresh": "search",
         "atk_thresh": "atk",
@@ -594,6 +917,7 @@ def load_gui_settings() -> dict:
         else:
             merged[key] = default
     data["thresh"] = merged
+    config.load_recent_scores(raw.get("recent_scores"))
     return data
 
 

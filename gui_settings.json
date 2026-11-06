@@ -1,57 +1,367 @@
 {
-  "goal": 3,
-  "count": 1,
+  "goal": 1,
+  "count": 9,
   "mode": "click",
   "hud_test": false,
   "rally_minutes": 1,
   "thresh": {
     "search": 0.8,
-    "search_go": 0.8,
-    "tab_tribute": 0.8,
-    "rally_red": 0.8,
-    "rally_yellow": 0.8,
-    "goal0_atk": 0.8,
-    "atk": 0.7,
-    "repair": 0.8,
-    "attack": 0.8,
+    "search_go": 0.9,
+    "tab_tribute": 0.9,
+    "tab_claw": 0.9,
+    "rally_red": 0.87,
+    "rally_yellow": 0.88,
+    "goal0_atk": 0.87,
+    "atk": 0.88,
+    "repair": 0.9,
+    "attack": 0.87,
+    "event1": 0.9,
     "teleport": 0.8,
     "invite_yes": 0.8,
     "invite_no": 0.8,
     "prayer_label": 0.8,
-    "flag": 0.7,
+    "flag": 0.63,
     "trading": 0.8,
-    "team_btn": 0.5,
+    "team_btn": 0.86,
     "invite": 0.9,
-    "invite_all": 0.8,
-    "back": 0.8,
-    "time_on": 0.8,
-    "time_off": 0.8,
-    "time_3": 0.8,
-    "mail": 0.8,
+    "invite_all": 0.9,
+    "back": 0.9,
+    "time_on": 0.89,
+    "time_off": 0.89,
+    "time_3": 0.9,
+    "mail": 0.9,
     "win": 0.8,
     "new": 0.8,
     "loot": 0.8,
-    "collection": 0.8,
-    "starview_1": 0.8,
-    "starview_2": 0.8,
-    "hunt_area1": 0.8,
-    "hunt_area2": 0.8,
-    "hunt_area3": 0.8,
-    "hunt_area4": 0.8,
-    "look": 0.8,
-    "ship_icon": 0.5,
-    "ship_hud": 0.8,
-    "lvl": 0.8,
-    "hud_ship": 0.5,
+    "collection": 0.87,
+    "starview_1": 0.88,
+    "starview_2": 0.86,
+    "hunt_area1": 0.9,
+    "hunt_area2": 0.9,
+    "hunt_area3": 0.9,
+    "hunt_area4": 0.9,
+    "look": 0.9,
+    "storage": 0.83,
+    "ticket_ark": 0.9,
+    "use": 0.9,
+    "use2": 0.88,
+    "ap_more": 0.88,
+    "pray100": 0.84,
+    "pray100b": 0.88,
+    "good": 0.9,
+    "good1": 0.9,
+    "close_btn": 0.9,
+    "ship_icon": 0.84,
+    "ship_hud": 0.9,
+    "lvl": 0.81,
+    "hud_ship": 0.8,
     "chat_tab_on": 0.8,
     "mgmt_tab_on": 0.8
   },
-  "ship_still_sec": 10,
+  "ship_still_sec": 5,
   "ship_still_px": 10,
-  "lvl_min": 16,
-  "lvl_max": 22,
+  "ship_click_above": 25,
+  "lvl_min": 19,
+  "lvl_max": 26,
   "wheel_pause": 0.1,
-  "mark_preview_sec": 10,
+  "focus_settle": 0.2,
+  "mark_preview_sec": 5,
   "infinite": false,
-  "show_marks": true
+  "watch_only": false,
+  "use_queue": false,
+  "queue": [],
+  "show_marks": true,
+  "recent_scores": {
+    "collection": [
+      1.0,
+      0.934,
+      1.0,
+      0.934,
+      1.0
+    ],
+    "starview_1": [
+      0.998,
+      0.999,
+      0.967,
+      0.981,
+      0.976
+    ],
+    "starview_2": [
+      0.995,
+      1.0,
+      0.929,
+      0.947,
+      0.937
+    ],
+    "hunt_area1": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "ship_hud": [
+      1.0,
+      0.997,
+      0.997,
+      0.997,
+      0.997
+    ],
+    "ship_icon": [
+      0.941,
+      0.941,
+      0.952,
+      0.941,
+      0.945
+    ],
+    "look": [
+      1.0,
+      0.999,
+      1.0,
+      1.0,
+      0.999
+    ],
+    "lvl": [
+      0.932,
+      0.847,
+      0.932,
+      0.971,
+      0.883
+    ],
+    "hunt_area2": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "hunt_area3": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "hunt_area4": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "search_go": [
+      0.998,
+      0.998,
+      0.998,
+      0.998,
+      0.998
+    ],
+    "tab_tribute": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "rally_red": [
+      0.967,
+      0.988,
+      0.937,
+      0.942,
+      0.995
+    ],
+    "rally_yellow": [
+      0.981,
+      0.981,
+      0.981,
+      0.981,
+      0.981
+    ],
+    "time_on": [
+      0.992,
+      0.992,
+      0.992,
+      0.992,
+      0.992
+    ],
+    "time_off": [
+      0.995,
+      0.995,
+      0.995,
+      0.995,
+      0.995
+    ],
+    "time_3": [
+      0.996,
+      0.996,
+      0.996,
+      0.996,
+      0.996
+    ],
+    "flag": [
+      0.73,
+      0.73,
+      0.73,
+      0.73,
+      0.73
+    ],
+    "team_btn": [
+      0.964,
+      0.964,
+      0.955,
+      0.964,
+      0.949
+    ],
+    "invite": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "invite_all": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "back": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "repair": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "storage": [
+      0.925,
+      0.925,
+      0.925,
+      0.925,
+      0.925
+    ],
+    "ticket_ark": [
+      0.999,
+      0.999,
+      0.999,
+      0.999,
+      0.999
+    ],
+    "use": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "goal0_atk": [
+      0.964,
+      0.987,
+      0.983,
+      0.952,
+      0.973
+    ],
+    "atk": [
+      0.98,
+      0.98,
+      0.98,
+      0.98,
+      0.98
+    ],
+    "event1": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "pray100": [
+      0.938,
+      0.927,
+      0.906,
+      0.997,
+      0.942
+    ],
+    "attack": [
+      0.971,
+      0.971,
+      0.967,
+      0.989,
+      0.976
+    ],
+    "good": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "good1": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "close_btn": [
+      0.999,
+      0.999,
+      0.999,
+      0.999,
+      0.999
+    ],
+    "tab_claw": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "mail": [
+      0.999,
+      0.999,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "search": [
+      1.0,
+      0.992,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "trading": [
+      0.984,
+      0.984,
+      0.985
+    ],
+    "win": [
+      0.711,
+      0.71
+    ],
+    "invite_yes": [
+      0.998
+    ],
+    "invite_no": [
+      0.999
+    ],
+    "prayer_label": [
+      0.998
+    ]
+  },
+  "windows": {
+    "odd": "720x480+26+26",
+    "thresh": "632x876+80+40",
+    "settings": "684x360+40+20",
+    "main": "480x734+139+331",
+    "queue": "420x480+921+647"
+  }
 }

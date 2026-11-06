@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import mss
 import numpy as np
 
+import config
 from config import GAME_SIZE
 
 user32 = ctypes.windll.user32
@@ -36,6 +37,8 @@ user32.ShowWindow.argtypes = [_H, ctypes.c_int]
 user32.SetForegroundWindow.argtypes = [_H]
 user32.BringWindowToTop.argtypes = [_H]
 user32.GetForegroundWindow.restype = _H
+user32.IsWindow.argtypes = [_H]
+user32.IsWindow.restype = ctypes.c_bool
 gdi32.CreateCompatibleDC.restype = _H
 gdi32.CreateCompatibleDC.argtypes = [_H]
 gdi32.CreateCompatibleBitmap.restype = _H
@@ -92,18 +95,19 @@ def _thread_id(hwnd: int) -> int:
     return int(user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)))
 
 
-def focus_window(rect: WindowRect) -> bool:
-    """把游戏拉到前台。后台线程点「开始」后 Windows 经常不让抢焦点，要点不进游戏。"""
-    hwnd = int(rect.hwnd or 0)
-    if not hwnd:
+def focus_hwnd(hwnd: int) -> bool:
+    """把这个窗口拉到前台。后台线程点「开始」后 Windows 经常不让抢焦点。"""
+    hwnd = int(hwnd or 0)
+    if not hwnd or not user32.IsWindow(hwnd):
         return False
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, 9)
     fg = user32.GetForegroundWindow()
-    if fg == hwnd:
+    fg_i = int(fg or 0)
+    if fg_i == hwnd:
         return True
     cur = kernel32.GetCurrentThreadId()
-    fg_tid = _thread_id(fg) if fg else 0
+    fg_tid = _thread_id(fg_i) if fg_i else 0
     tgt_tid = _thread_id(hwnd)
     if fg_tid:
         user32.AttachThreadInput(cur, fg_tid, True)
@@ -113,11 +117,42 @@ def focus_window(rect: WindowRect) -> bool:
     if fg_tid:
         user32.AttachThreadInput(cur, fg_tid, False)
     user32.AttachThreadInput(cur, tgt_tid, False)
-    if user32.GetForegroundWindow() != hwnd:
+    if int(user32.GetForegroundWindow() or 0) != hwnd:
         user32.keybd_event(0x12, 0, 0, 0)
         user32.SetForegroundWindow(hwnd)
         user32.keybd_event(0x12, 0, 2, 0)
-    return user32.GetForegroundWindow() == hwnd
+    return int(user32.GetForegroundWindow() or 0) == hwnd
+
+
+def focus_window(rect: WindowRect) -> bool:
+    return focus_hwnd(int(rect.hwnd or 0))
+
+
+class _HoldForeground:
+    """操作前把游戏放到前台，做完切回刚才的窗口。"""
+
+    def __init__(self, rect: WindowRect) -> None:
+        self.rect = rect
+        self.prev = 0
+        self.ok = False
+
+    def __enter__(self) -> bool:
+        self.prev = int(user32.GetForegroundWindow() or 0)
+        self.ok = focus_window(self.rect)
+        game = int(self.rect.hwnd or 0)
+        if self.prev != game:
+            time.sleep(max(0.0, float(config.FOCUS_SETTLE)))
+        return self.ok
+
+    def __exit__(self, *_) -> None:
+        game = int(self.rect.hwnd or 0)
+        if self.prev and self.prev != game:
+            time.sleep(max(0.0, float(config.FOCUS_SETTLE)))
+            focus_hwnd(self.prev)
+
+
+def hold_foreground(rect: WindowRect) -> _HoldForeground:
+    return _HoldForeground(rect)
 
 
 class _MOUSEINPUT(ctypes.Structure):
